@@ -25,6 +25,7 @@ setup(
         'console_scripts': [
             'linefollow = Projet_CDVDM_IB.line_following_node:main',
             'corridornavigation = Projet_CDVDM_IB.corridor_navigation_node:main',
+            'obstacleavoidance = Projet_CDVDM_IB.obstacle_avoidance_node:main'
         ],
     },
 )
