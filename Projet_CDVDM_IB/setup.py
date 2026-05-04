@@ -25,6 +25,8 @@ setup(
         'console_scripts': [
             'linefollow = Projet_CDVDM_IB.line_following_node:main',
             'corridornavigation = Projet_CDVDM_IB.corridor_navigation_node:main',
+            'hsvtune = Projet_CDVDM_IB.hsv_calibration_node:main',
+            'handteleop=Projet_CDVDM_IB.handteleop_node:main',
         ],
     },
 )
