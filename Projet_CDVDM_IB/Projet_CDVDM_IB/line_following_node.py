@@ -15,7 +15,7 @@ class LineFollowing(Node):
         super().__init__('compressed_image_subscriber')
         self.subscription = self.create_subscription(
             CompressedImage,
-            '/image_raw/compressed',
+            '/camera/image_raw/compressed',
             self.listener_callback,
             10
         )
@@ -25,12 +25,12 @@ class LineFollowing(Node):
         self.publisher = self.create_publisher(Twist,'/cmd_vel',10)
 
         self.image = None
-        self.horizon = 275
+        self.horizon = 130
 
         self.middle_screen =  None
         self.middle_point = None
         self.steerdir = None
-        self.margin  = 350
+        self.margin  = 160
 
         self.green_centroid = None
         self.red_centroid = None
@@ -123,14 +123,14 @@ class LineFollowing(Node):
     def hsv_segmentation(self,image):
             image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-            lower_red1 = np.array([0, 80, 80])
+            lower_red1 = np.array([0, 30, 140])
             upper_red1 = np.array([10, 255, 255])
 
-            lower_red2 = np.array([160, 80, 80])
+            lower_red2 = np.array([160, 30, 140])
             upper_red2 = np.array([179, 255, 255])
 
-            lower_green = np.array([30, 80, 80])
-            upper_green = np.array([85, 255, 255])
+            lower_green = np.array([30, 30, 100])
+            upper_green = np.array([93, 255, 255])
 
             mask_red1 = cv2.inRange(image_hsv, lower_red1, upper_red1)
             mask_red2 = cv2.inRange(image_hsv, lower_red2, upper_red2)
@@ -152,12 +152,15 @@ class LineFollowing(Node):
         fifth_screen = width // 5
         self.middle_screen = width // 2
 
-        lower_roi = image_hsv[self.horizon:, :, :]
+        horizon = min(self.horizon, height - 1)
+
+        lower_roi = image_hsv[horizon:, :, :]
         h_lroi = lower_roi[:, :, 0]
         s_lroi = lower_roi[:, :, 1]
+        v_lroi = lower_roi[:, :, 2]
 
-        green_mask = ((h_lroi >= 30) & (h_lroi <= 85) & (s_lroi >= 80))
-        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 80))
+        green_mask = ((h_lroi >= 30) & (h_lroi <= 93) & (s_lroi >= 30) & (v_lroi >= 100))
+        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 30)& (v_lroi >= 140))
 
         # 2D binary images for moment calculation
         green_binary = np.zeros(lower_roi.shape[:2], dtype=np.uint8)
@@ -173,13 +176,18 @@ class LineFollowing(Node):
         self.green_centroid = (green_centroid[0], green_centroid[1] + self.horizon) if green_centroid else None
         self.red_centroid = (red_centroid[0], red_centroid[1] + self.horizon) if red_centroid else None
 
+        self.get_logger().info(f"green_centroid: {green_centroid} | red_centroid: {red_centroid}")
+        self.get_logger().info(f"green pixels: {np.sum(green_mask)} | red pixels: {np.sum(red_mask)}")
+        self.get_logger().info(f"image shape: {image_hsv.shape} | horizon: {self.horizon}")
+
         # Upper ROI centroids
-        upper_roi = image_hsv[:self.horizon, :, :]
+        upper_roi = image_hsv[:horizon, :, :]
         h_uroi = upper_roi[:, :, 0]
         s_uroi = upper_roi[:, :, 1]
+        v_uroi = upper_roi[:, :, 2]
 
-        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 85) & (s_uroi >= 80))
-        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 80))
+        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 93) & (s_uroi >= 30) & (v_uroi >= 100))
+        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 30)& (v_uroi >= 140))
 
         upper_green_binary = np.zeros(upper_roi.shape[:2], dtype=np.uint8)
         upper_green_binary[upper_green_mask] = 255
@@ -193,7 +201,7 @@ class LineFollowing(Node):
         self.upper_green_centroid = upper_green_centroid if upper_green_centroid else None
         self.upper_red_centroid = upper_red_centroid if upper_red_centroid else None
 
-        if self.upper_green_centroid is not None and self.upper_red_centroid is not None and math.dist(self.upper_green_centroid,self.upper_red_centroid)<10:
+        if self.upper_green_centroid is not None and self.upper_red_centroid is not None and self.upper_green_centroid[0] > self.upper_red_centroid[0]:
             self.message.linear.x = 0.0
             self.message.angular.z = 0.0
             self.roundabout_mode=True
@@ -203,24 +211,24 @@ class LineFollowing(Node):
         # green should be in left fifth, red in right fifth of lower ROI
         green_valid = (
             green_centroid is not None and
-            self.horizon <= green_centroid[1] + self.horizon < height and  # in lower screen
+            self.horizon <= green_centroid[1] + horizon < height and  # in lower screen
             green_centroid[0] < 4 * fifth_screen                               # in left fifth
         )
         red_valid = (
             red_centroid is not None and
-            self.horizon <= red_centroid[1] + self.horizon < height and    # in lower screen
+            self.horizon <= red_centroid[1] + horizon < height and    # in lower screen
             red_centroid[0] > fifth_screen                            # in right fifth
         )
 
         green_center = (
             green_centroid is not None and
-            self.horizon <= green_centroid[1] + self.horizon < height and 
+            self.horizon <= green_centroid[1] + horizon < height and 
             fifth_screen < green_centroid[0]                           
         )
 
         red_center = (
             red_centroid is not None and
-            self.horizon <= red_centroid[1] + self.horizon < height and    
+            self.horizon <= red_centroid[1] + horizon < height and    
             fifth_screen < red_centroid[0] < 4 * fifth_screen                        
         )
 
@@ -260,13 +268,13 @@ class LineFollowing(Node):
         
         
         ang_gain = 1.0
-        lin_gain = 1.0
+        lin_gain = 0.75
         if green_center or red_center:
-            ang_gain = 6  # increase this to taste
-            lin_gain = 0.5
+            ang_gain = 5.5  # increase this to taste
+            lin_gain = 0.8
         else:
             ang_gain = 1.0
-            lin_gain = 1.0
+            lin_gain = 0.75
 
         raw_angular = -float(drift) / (self.middle_screen * 2) * angular_scale * ang_gain
         self.message.angular.z = max(-0.3, min(0.3, raw_angular))
@@ -289,20 +297,23 @@ class LineFollowing(Node):
 
 
     def run(self):
-        rate = self.create_rate(20)
-
+        self.get_logger().info("run() started")
         while rclpy.ok():
-            if self.image is not None and not(self.roundabout_mode):
-                image_hsv = self.hsv_segmentation(self.image)
-                self.steer(image_hsv)
+            self.get_logger().info(f"loop tick | image: {self.image is not None} | roundabout: {self.roundabout_mode}")
+            image = self.image
+            if image is not None:
+                self.get_logger().info("image received, calling steer...")
                 if self.roundabout_mode:
                     self.roundabout_protocol()
                     self.roundabout_mode = False
                     self.margin = 300
-                    self.horizon = 200
-            rate.sleep()
+                    self.horizon = 275
+                else:
+                    image_hsv = self.hsv_segmentation(image.copy())
+                    self.steer(image_hsv)
+            time.sleep(0.05)
 
-    def roundabout_protocol(self,forward_time=5, turn_time=5):
+    def roundabout_protocol(self,forward_time=2, turn_time=2):
         if self.roundabout_dir=="R":
             linear_scale = self.get_parameter('linear_scale').value
             angular_scale = self.get_parameter('angular_scale').value
