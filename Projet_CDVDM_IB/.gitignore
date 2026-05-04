@@ -1,2 +1,2 @@
-Projet_CDVDM_IB/__pycache__/
-*.py[cod]
+__pycache__/
+*.pyc
