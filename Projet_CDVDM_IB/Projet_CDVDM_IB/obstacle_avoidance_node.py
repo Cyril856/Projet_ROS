@@ -1,369 +1,144 @@
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import LaserScan
-import numpy as np
-import time
-import math
-import cv2
-import threading
 from geometry_msgs.msg import Twist
+import math
 
 class ObstacleAvoidance(Node):
     def __init__(self):
         super().__init__('obstacle_avoidance_node')
 
-        # Subs
-        self.camera_sub = self.create_subscription(
-            CompressedImage,
-            '/camera/image_raw/compressed',
-            self.listener_callback,
-            10
-        )
-
-        self.lidar_sub = self.create_subscription(
+        self.subscription = self.create_subscription(
             LaserScan,
-            '/scan', 
+            '/scan',
             self.lidar_callback,
             10
         )
+        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
 
-        # Pub
-        self.publisher = self.create_publisher(Twist,'/cmd_vel',10)
-        self.twist = Twist()
+        # --- Paramètres ---
+        self.stop_distance   = 0.3    # Distance de détection d'une bouteille (m)
+        self.linear_speed    = 0.05   # Vitesse linéaire faible (m/s)
+        self.angular_speed   = 0.3    # Vitesse angulaire d'évitement (rad/s)
 
-        # Variables pour stocker les dernières données reçues
-        self.latest_image = None
-        self.latest_scan = None
-        self.image = None
-        self.horizon = 275
-        self.margin  = 350
+        # --- Machine à états ---
+        # 'straight'   : ligne droite, pas d'obstacle
+        # 'avoiding'   : rotation en cours pour éviter la bouteille
+        # 'returning'  : rotation inverse pour se recadrer
+        self.state           = 'straight'
+        self.avoid_direction = 0      # +1 = tourne gauche, -1 = tourne droite
+        self.avoid_steps     = 0      # Nombre de callbacks en rotation d'évitement
+        self.return_steps    = 0      # Compteur de retour (même durée)
 
-        self.middle_screen =  None
-        self.middle_point = None
-        self.steerdir = None
-        self.green_centroid = None
-        self.red_centroid = None
-        self.upper_green_centroid = None
-        self.upper_red_centroid = None
+        self.get_logger().info("Bottle Avoidance Node Started")
 
-        self.roundabout_mode= False
-
-        self.declare_parameter('linear_scale', 1.0)
-        self.declare_parameter('angular_scale',1.0)
-        self.stop_distance = 0.25
-        self.velo_ang = 0.15
-
-        # Timer pour synchronisation (optionnel)
-        self.sync_timer = self.create_timer(0.1, self.check_sync)
-
-    # callbacks
-    def lidar_callback(self, msg):
-        self.latest_scan = msg
-        regions = self.range_lidar(msg)
-        self.decide_action(regions)  # Pas d'image, donc seul le LiDAR est utilisé
-
-    def listener_callback(self, msg):
-        self.latest_image = msg
-
-    # fonctions Lidar
     def safe_min(self, ranges_slice, default=float('inf')):
-        filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0]  # Exclure les 0.0
+        filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0]
         return min(filtered) if filtered else default
 
-    def range_lidar(self, msg):
+    def lidar_callback(self, msg):
         regions = {
-        'front' : self.safe_min(msg.ranges[340:360] + msg.ranges[0:20]),  # 40° devant
-        'fleft' : self.safe_min(msg.ranges[21:60]),                      # 30° à gauche avant
-        'left'  : self.safe_min(msg.ranges[61:120]),                     # 75° à gauche
-        'right' : self.safe_min(msg.ranges[240:300]),                    # 75° à droite
-        'fright': self.safe_min(msg.ranges[301:339])                    # 30° à droite avant  
+            'front'  : self.safe_min(msg.ranges[350:360] + msg.ranges[0:10]),
+            'fleft'  : self.safe_min(msg.ranges[11:50]),
+            'left'   : self.safe_min(msg.ranges[51:120]),
+            'right'  : self.safe_min(msg.ranges[240:310]),
+            'fright' : self.safe_min(msg.ranges[311:349]),
         }
-        return regions
+        self.take_action(regions)
 
-    def decide_action(self, regions, latest_image=None):
+    def take_action(self, regions):
         twist = Twist()
-        linear_x = 0.0
-        angular_z = 0.0
-        state_description = ''
+        twist.linear.x = self.linear_speed  # Toujours une légère avance
 
-        # Logique LiDAR (prioritaire)
-        if (regions['front'] < self.stop_distance or
-            regions['fleft'] < self.stop_distance or
-            regions['fright'] < self.stop_distance):
+        # ------------------------------------------------------------------ #
+        #  ÉTAT : straight — on scrute fleft et fright                        #
+        # ------------------------------------------------------------------ #
+        if self.state == 'straight':
+            bottle_left  = regions['fleft']  < self.stop_distance
+            bottle_right = regions['fright'] < self.stop_distance
 
-            if regions['front'] < self.stop_distance and regions['fleft'] > self.stop_distance and regions['fright'] > self.stop_distance:
-                state_description = 'case 2 - front'
-                linear_x = 0.0
-                angular_z = self.velo_ang
-            elif regions['front'] > self.stop_distance and regions['fleft'] > self.stop_distance and regions['fright'] < self.stop_distance:
-                state_description = 'case 3 - fright'
-                linear_x = 0.1
-                angular_z = self.velo_ang
-            elif regions['front'] > self.stop_distance and regions['fleft'] < self.stop_distance and regions['fright'] > self.stop_distance:
-                state_description = 'case 4 - fleft'
-                linear_x = 0.1
-                angular_z = -self.velo_ang
-            elif regions['front'] < self.stop_distance and regions['fleft'] > self.stop_distance and regions['fright'] < self.stop_distance:
-                state_description = 'case 5 - front and fright'
-                linear_x = 0.0
-                angular_z = self.velo_ang
-            elif regions['front'] < self.stop_distance and regions['fleft'] < self.stop_distance and regions['fright'] > self.stop_distance:
-                state_description = 'case 6 - front and fleft'
-                linear_x = 0.0
-                angular_z = -self.velo_ang
-            elif regions['front'] < self.stop_distance and regions['fleft'] < self.stop_distance and regions['fright'] < self.stop_distance:
-                state_description = 'case 7 - front and fleft and fright'
-                linear_x = -0.15
-                angular_z = 0.0
-            self.get_logger().info(f"{state_description} | Regions: {regions}")
-        # Logique caméra (si pas d'obstacle LiDAR)
-        elif latest_image is not None:
-            self.affichage(latest_image)
-        else:
-            state_description = 'pas d''obstacle detecte'
-            linear_x = 0.1
-            angular_z = 0.0
+            if bottle_left and not bottle_right:
+                # Bouteille à gauche → tourner à droite (angular négatif)
+                self.avoid_direction = -1
+                self.state           = 'avoiding'
+                self.avoid_steps     = 0
+                self.get_logger().info("Bouteille à GAUCHE → rotation droite")
 
-        twist.linear.x = linear_x
-        twist.angular.z = angular_z
-        self.publisher.publish(twist)
+            elif bottle_right and not bottle_left:
+                # Bouteille à droite → tourner à gauche (angular positif)
+                self.avoid_direction = +1
+                self.state           = 'avoiding'
+                self.avoid_steps     = 0
+                self.get_logger().info("Bouteille à DROITE → rotation gauche")
 
-    def check_sync(self):
-        if self.latest_image is not None and self.latest_scan is not None:
-            regions = self.range_lidar(self.latest_scan)
-            self.decide_action(regions, self.latest_image)
+            elif bottle_left and bottle_right:
+                # Les deux côtés bloqués : priorité au plus proche
+                if regions['fleft'] < regions['fright']:
+                    self.avoid_direction = -1   # plus proche à gauche → droite
+                else:
+                    self.avoid_direction = +1   # plus proche à droite → gauche
+                self.state       = 'avoiding'
+                self.avoid_steps = 0
+                self.get_logger().info("Bouteilles des DEUX côtés → priorité au plus proche")
 
-    # fonctions caméra
-    def affichage(self, latest_image):
-        np_arr = np.frombuffer(latest_image.data, np.uint8)
-        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        if image is not None:
-            self.image = image
-            display = self.hsv_segmentation(image)
-            display = cv2.cvtColor(display, cv2.COLOR_HSV2BGR) if display.shape[2] == 3 else display
+            else:
+                # Voie libre
+                twist.angular.z = 0.0
+                self.get_logger().info("Ligne droite - aucun obstacle")
 
-            # Horizon line in white
-            cv2.line(display, (0, self.horizon), (display.shape[1], self.horizon), (255, 255, 255), 1)
-
-            # fifth screen dividers in grey
-            fifth= display.shape[1] // 5
-            cv2.line(display, (fifth, self.horizon), (fifth, display.shape[0]), (100, 100, 100), 1)
-            cv2.line(display, (4 * fifth, self.horizon), (4 * fifth, display.shape[0]), (100, 100, 100), 1) 
-
-            # Green centroid in green
-            if self.green_centroid is not None:
-                cv2.circle(display, self.green_centroid, 7, (0, 255, 0), -1)
-
-            # Red centroid in red
-            if self.red_centroid is not None:
-                cv2.circle(display, self.red_centroid, 7, (0, 0, 255), -1)
-
-            # Middle screen in blue
-            if self.middle_screen is not None:
-                cv2.circle(display, (self.middle_screen, self.horizon), 5, (255, 0, 0), -1)
-
-            # Steering target (middle_point) in yellow
-            if self.middle_point is not None:
-                cv2.circle(display, (self.middle_point, self.horizon), 5, (0, 255, 255), -1)
-
-            # Line between centroids if both visible
-            if self.green_centroid is not None and self.red_centroid is not None:
-                cv2.line(display, self.green_centroid, self.red_centroid, (255, 255, 255), 1)                        
-
-            cv2.imshow("Compressed Image", display)
-            cv2.waitKey(1)
-
-        else:
-            self.get_logger().warn("Failed to decode compressed image")
-
-    def hsv_segmentation(self,image):
-            image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-            lower_red1 = np.array([0, 80, 80])
-            upper_red1 = np.array([10, 255, 255])
-
-            lower_red2 = np.array([160, 80, 80])
-            upper_red2 = np.array([179, 255, 255])
-
-            lower_green = np.array([30, 80, 80])
-            upper_green = np.array([85, 255, 255])
-
-            mask_red1 = cv2.inRange(image_hsv, lower_red1, upper_red1)
-            mask_red2 = cv2.inRange(image_hsv, lower_red2, upper_red2)
-            mask_yellow = cv2.inRange(image_hsv, lower_green, upper_green)
-
-
-            mask = cv2.bitwise_or(mask_yellow, cv2.bitwise_or(mask_red2,mask_red1))
-
-            hsv_seg = cv2.bitwise_and(image, image, mask=mask)
-            hsv_seg = cv2.cvtColor(hsv_seg, cv2.COLOR_BGR2HSV)
-            return hsv_seg
-
-    def steer(self, image_hsv):
-        linear_scale = self.get_parameter('linear_scale').value
-        angular_scale = self.get_parameter('angular_scale').value
-
-        width = image_hsv.shape[1]
-        height = image_hsv.shape[0]
-        fifth_screen = width // 5
-        self.middle_screen = width // 2
-
-        lower_roi = image_hsv[self.horizon:, :, :]
-        h_lroi = lower_roi[:, :, 0]
-        s_lroi = lower_roi[:, :, 1]
-
-        green_mask = ((h_lroi >= 30) & (h_lroi <= 85) & (s_lroi >= 80))
-        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 80))
-
-        # 2D binary images for moment calculation
-        green_binary = np.zeros(lower_roi.shape[:2], dtype=np.uint8)
-        green_binary[green_mask] = 255
-        red_binary = np.zeros(lower_roi.shape[:2], dtype=np.uint8)
-        red_binary[red_mask] = 255
-
-
-        green_centroid = self.centroid(green_binary)
-        red_centroid = self.centroid(red_binary)
-
-        # Store for display (offset back to full image coordinates)
-        self.green_centroid = (green_centroid[0], green_centroid[1] + self.horizon) if green_centroid else None
-        self.red_centroid = (red_centroid[0], red_centroid[1] + self.horizon) if red_centroid else None
-
-        # Upper ROI centroids
-        upper_roi = image_hsv[:self.horizon, :, :]
-        h_uroi = upper_roi[:, :, 0]
-        s_uroi = upper_roi[:, :, 1]
-
-        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 85) & (s_uroi >= 80))
-        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 80))
-
-        upper_green_binary = np.zeros(upper_roi.shape[:2], dtype=np.uint8)
-        upper_green_binary[upper_green_mask] = 255
-        upper_red_binary = np.zeros(upper_roi.shape[:2], dtype=np.uint8)
-        upper_red_binary[upper_red_mask] = 255
-
-        upper_green_centroid = self.centroid(upper_green_binary)
-        upper_red_centroid = self.centroid(upper_red_binary)
-
-        # No horizon offset needed since upper ROI starts at row 0
-        self.upper_green_centroid = upper_green_centroid if upper_green_centroid else None
-        self.upper_red_centroid = upper_red_centroid if upper_red_centroid else None
-
-        # Check if centroids are valid and in their expected regions:
-        # green should be in left fifth, red in right fifth of lower ROI
-        green_valid = (
-            green_centroid is not None and
-            self.horizon <= green_centroid[1] + self.horizon < height and  # in lower screen
-            green_centroid[0] < 4 * fifth_screen                               # in left fifth
-        )
-        red_valid = (
-            red_centroid is not None and
-            self.horizon <= red_centroid[1] + self.horizon < height and    # in lower screen
-            red_centroid[0] > fifth_screen                            # in right fifth
-        )
-
-        green_center = (
-            green_centroid is not None and
-            self.horizon <= green_centroid[1] + self.horizon < height and 
-            fifth_screen < green_centroid[0]                           
-        )
-
-        red_center = (
-            red_centroid is not None and
-            self.horizon <= red_centroid[1] + self.horizon < height and    
-            fifth_screen < red_centroid[0] < 4 * fifth_screen                        
-        )
-
-        if green_valid:
-            self.last_green_center = green_centroid[0]
-        if red_valid:
-            self.last_red_center = red_centroid[0]
-
-        if green_valid and red_valid:
-            # Both lines visible: steer to middle of segment between them
-            self.middle_point = (green_centroid[0] + red_centroid[0]) // 2
-            drift = self.middle_point - self.middle_screen
-            self.get_logger().info(
-                f"Both lines | green: {green_centroid[0]} | red: {red_centroid[0]} | "
-                f"middle: {self.middle_point} | drift: {drift}"
+        # ------------------------------------------------------------------ #
+        #  ÉTAT : avoiding — on tourne jusqu'à ce que la bouteille disparaisse #
+        # ------------------------------------------------------------------ #
+        elif self.state == 'avoiding':
+            bottle_in_danger_zone = (
+                regions['fleft']  < self.stop_distance or
+                regions['fright'] < self.stop_distance
             )
 
-        elif red_valid and not green_valid:
-            # Only red visible: stay at fixed offset to its left
-            self.middle_point = red_centroid[0] - self.margin
-            drift = self.middle_point - self.middle_screen
-            self.get_logger().warn(f"Green lost, steering from red | drift: {drift}")
+            if bottle_in_danger_zone:
+                # Continuer à tourner et compter les pas
+                twist.angular.z = self.avoid_direction * self.angular_speed
+                self.avoid_steps += 1
+                self.get_logger().info(
+                    f"Évitement en cours (pas={self.avoid_steps}, "
+                    f"fleft={regions['fleft']:.2f}, fright={regions['fright']:.2f})"
+                )
+            else:
+                # Bouteille hors du champ → passer en retour
+                self.return_steps = self.avoid_steps   # mémorise la durée d'évitement
+                self.state        = 'returning'
+                twist.angular.z   = -self.avoid_direction * self.angular_speed
+                self.get_logger().info(
+                    f"Bouteille dégagée → retour ({self.return_steps} pas)"
+                )
 
-        elif green_valid and not red_valid:
-            # Only green visible: stay at fixed offset to its right
-            self.middle_point = green_centroid[0] + self.margin
-            drift = self.middle_point - self.middle_screen
-            self.get_logger().warn(f"Red lost, steering from green | drift: {drift}")
+        # ------------------------------------------------------------------ #
+        #  ÉTAT : returning — on tourne en sens inverse le même nombre de pas #
+        # ------------------------------------------------------------------ #
+        elif self.state == 'returning':
+            if self.return_steps > 0:
+                twist.angular.z    = -self.avoid_direction * self.angular_speed
+                self.return_steps -= 1
+                self.get_logger().info(f"Retour cap initial (restant={self.return_steps})")
+            else:
+                # Retour terminé → ligne droite
+                twist.angular.z = 0.0
+                self.state      = 'straight'
+                self.get_logger().info("Cap initial retrouvé → ligne droite")
 
-        else:
-            # No centroid found: search
-            self.get_logger().warn("No lines detected, searching...")
-            self.twist.angular.z = 0.3 * angular_scale
-            self.twist.linear.x = 0.0
-            self.publisher.publish(self.twist)
-            return
-        
-        
-        ang_gain = 1.0
-        lin_gain = 1.0
-        if green_center or red_center:
-            ang_gain = 6  # increase this to taste
-            lin_gain = 0.5
-        else:
-            ang_gain = 1.0
-            lin_gain = 1.0
+        self.publisher.publish(twist)
 
-        raw_angular = -float(drift) / (self.middle_screen * 2) * angular_scale * ang_gain
-        self.twist.angular.z = max(-0.3, min(0.3, raw_angular))
-        turn_factor = 1.0 - min(abs(raw_angular) / 0.2, 1.0)
-        self.twist.linear.x = max(0.05, 0.1 * turn_factor) * linear_scale * lin_gain
-
-        self.publisher.publish(self.twist)
-
-
-    def centroid(self, image_bin):
-        M = cv2.moments(image_bin)
-
-        # Avoid division by zero if mask is empty
-        if M["m00"] == 0:
-            return None
-
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-        return cX, cY
-
-
-    def run(self):
-        rate = self.create_rate(20)
-
-        while rclpy.ok():
-            if self.image is not None and not(self.roundabout_mode):
-                image_hsv = self.hsv_segmentation(self.image)
-                self.steer(image_hsv)
-            rate.sleep()
 
 def main(args=None):
     rclpy.init(args=args)
-
     node = ObstacleAvoidance()
-    thread =  threading.Thread(target=rclpy.spin, args=(node,),daemon=True)
-    thread.start()
-
     try:
-        node.run()
-
+        rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+        node.get_logger().info("Arrêt du nœud")
     finally:
         node.destroy_node()
         rclpy.shutdown()
-        cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     main()
