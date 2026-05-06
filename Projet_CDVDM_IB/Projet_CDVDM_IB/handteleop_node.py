@@ -7,7 +7,13 @@ import cv2
 import mediapipe as mp
 
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(max_num_hands=1)
+hands = mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=1,          # was probably 2
+    model_complexity=0,        # 0 = fastest, 1 = default
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
 mp_draw = mp.solutions.drawing_utils
 
 import threading
@@ -27,6 +33,7 @@ class HandTeleop(Node):
             self.robot_callback,
             10
         )
+        self.timer = self.create_timer(0.03, self.robot_callback)
 
     def robot_callback(self, msg):
         np_arr = np.frombuffer(msg.data, np.uint8)
@@ -37,6 +44,10 @@ class HandTeleop(Node):
 
     def run(self):
         cap = cv2.VideoCapture("http://host.docker.internal:8080/video")
+
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        cap.set(cv2.CAP_PROP_FPS, 60)
 
         while rclpy.ok():
             ret, frame = cap.read()
@@ -54,18 +65,32 @@ class HandTeleop(Node):
                     index_tip=handLms.landmark[8]
                     index_mcp=handLms.landmark[5]
 
-                    if index_tip.x > index_mcp.x:
-                        self.message.linear.x = 0.7
-                        movement_text = "FORWARD"
-                    elif index_tip.x < index_mcp.x:
-                        self.message.linear.x = -0.7
-                        movement_text = "BACKWARD"
-                    elif index_tip.y > index_mcp.y:
-                        self.message.angular.z = 0.7
-                        movement_text = "TURN LEFT"
-                    elif index_tip.y < index_mcp.y:
-                        self.message.angular.z = -0.7
-                        movement_text = "TURN RIGHT"
+                    THRESHOLD = 0.05  # 5% of frame size, tune this up/down as needed
+
+                    dx = index_tip.x - index_mcp.x
+                    dy = index_tip.y - index_mcp.y
+
+                    if  abs(dy) > abs(dx): # horizontal movement dominates
+                        if dy > THRESHOLD:
+                            self.message.linear.x = -0.7
+                            movement_text = "BACKWARD"
+
+                        elif dy < -THRESHOLD:
+                            self.message.linear.x = 0.7
+                            movement_text = "FORWARD"
+                            
+                        else:
+                            movement_text = "STOP"
+                    elif  abs(dx) > abs(dy): # vertical movement dominates
+                        if dx > THRESHOLD:
+                            self.message.angular.z = -0.7
+                            movement_text = "TURN RIGHT"
+                        elif dx < -THRESHOLD:
+                            self.message.angular.z = 0.7
+                            movement_text = "TURN LEFT"
+                            
+                        else:
+                            movement_text = "STOP"
                     else:
                         movement_text = "STOP"
 
