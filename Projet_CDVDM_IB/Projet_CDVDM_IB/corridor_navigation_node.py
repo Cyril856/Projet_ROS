@@ -3,6 +3,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 import math
+from std_srvs.srv import SetBool
 
 class CorridorNavigation(Node):
     def __init__(self):
@@ -20,21 +21,33 @@ class CorridorNavigation(Node):
             '/cmd_vel',
             10
         )
-        self.get_logger().info("Corridor Navigation Node Started")
+
+        # controle de node
+        self.active = False
+        self.srv = self.create_service(SetBool, '/activate_corridor', self.handle_activation)
+
+      # Callback du service
+    def handle_activation(self, request, response):
+        self.active = request.data
+        response.success = True
+        response.message = f"Corridor node state: {self.active}"
+        return response
 
     def safe_min(self, ranges_slice, default=float('inf')):
         filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0]  # Exclure les 0.0
         return min(filtered) if filtered else default
 
     def lidar_callback(self, msg):
-        regions = {
-        'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),  # 30° devant
-        'fleft' : self.safe_min(msg.ranges[16:75]),                      # 60° à gauche avant
-        'left'  : self.safe_min(msg.ranges[76:120]),                     # 45° à gauche
-        'right' : self.safe_min(msg.ranges[240:285]),                    # 45° à droite
-        'fright': self.safe_min(msg.ranges[286:345])                    # 60° à droite avant  
-        }
-        self.take_action(regions)
+        if self.active:
+            self.get_logger().info("Corridor Node Started")
+            regions = {
+            'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),  # 30° devant
+            'fleft' : self.safe_min(msg.ranges[16:75]),                      # 60° à gauche avant
+            'left'  : self.safe_min(msg.ranges[76:120]),                     # 45° à gauche
+            'right' : self.safe_min(msg.ranges[240:285]),                    # 45° à droite
+            'fright': self.safe_min(msg.ranges[286:345])                    # 60° à droite avant  
+            }
+            self.take_action(regions)
 
     def take_action(self, regions):
         twist = Twist()

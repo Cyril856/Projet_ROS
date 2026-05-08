@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import LaserScan
 import numpy as np
 import time
 import math
@@ -13,17 +14,28 @@ from geometry_msgs.msg import Twist
 class LineFollowing(Node):
     def __init__(self):
         super().__init__('compressed_image_subscriber')
-        self.subscription = self.create_subscription(
+        self.camera_sub = self.create_subscription(
             CompressedImage,
             '/camera/image_raw/compressed',
             self.listener_callback,
             10
         )
-        self.subscription  # to prevent unused variable warning
+
+        self.lidar_sub = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.lidar_callback,
+            10
+        )
+    
+        #self.subscription  # to prevent unused variable warning
 
         self.message = Twist()
         self.publisher = self.create_publisher(Twist,'/cmd_vel',10)
 
+        self.latest_image = None
+        self.latest_scan = None
+    
         self.image = None
         self.horizon = 130
 
@@ -44,7 +56,45 @@ class LineFollowing(Node):
         self.declare_parameter('linear_scale', 1.0)
         self.declare_parameter('angular_scale',1.0)
 
+        # STOP
+        self.declare_parameter('emergency_stop_dist', 0.1)
+        self.emergency_stop_dist = self.get_parameter('emergency_stop_dist').value
+        self.stop = False
+
+        # Timer pour synchronisation (optionnel)
+        self.sync_timer = self.create_timer(0.1, self.check_sync)
+
+    def check_sync(self):
+        if self.latest_image is not None and self.latest_scan is not None:
+            self.analyse_lidar(self.latest_scan, self.latest_image)
+
+    def safe_min(self, ranges_slice, default=float('inf')):
+            filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0 and x < 1.0]
+            return min(filtered) if filtered else default
+
+    def lidar_callback(self, msg):
+        self.latest_scan = msg
+
+    def analyse_lidar(self, latest_scan, latest_image) :
+        front = self.safe_min(latest_scan.ranges[345:360] + latest_scan.ranges[0:15])
+        if front < self.emergency_stop_dist:
+            self.stop = True
+            self.message.linear.x = 0.0
+            self.message.angular.z = 0.0
+            self.publisher.publish(self.message)
+            self.get_logger().warn(f"EMERGENCY STOP — obstacle à {front:.2f} m")
+        else : 
+            self.stop = False
+            self.affichage(latest_image)
+
     def listener_callback(self, msg):
+        self.latest_image = msg
+    
+    def affichage(self, latest_image):
+        if self.stop:     #okasou
+            return
+        msg = latest_image
+        
         # Convertir les données compressées en tableau numpy
         np_arr = np.frombuffer(msg.data, np.uint8)
         # Décoder l'image
@@ -123,14 +173,14 @@ class LineFollowing(Node):
     def hsv_segmentation(self,image):
             image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-            lower_red1 = np.array([0, 30, 140])
-            upper_red1 = np.array([10, 255, 255])
+            lower_red1 = np.array([0, 76, 80])
+            upper_red1 = np.array([16, 255, 255])
 
-            lower_red2 = np.array([160, 30, 140])
+            lower_red2 = np.array([160, 80, 80])
             upper_red2 = np.array([179, 255, 255])
 
-            lower_green = np.array([30, 30, 100])
-            upper_green = np.array([93, 255, 255])
+            lower_green = np.array([45, 15, 51])
+            upper_green = np.array([90, 255, 255])
 
             mask_red1 = cv2.inRange(image_hsv, lower_red1, upper_red1)
             mask_red2 = cv2.inRange(image_hsv, lower_red2, upper_red2)
@@ -144,6 +194,8 @@ class LineFollowing(Node):
             return hsv_seg
 
     def steer(self, image_hsv):
+        if self.stop:    # okasou
+            return
         linear_scale = self.get_parameter('linear_scale').value
         angular_scale = self.get_parameter('angular_scale').value
 
@@ -159,8 +211,8 @@ class LineFollowing(Node):
         s_lroi = lower_roi[:, :, 1]
         v_lroi = lower_roi[:, :, 2]
 
-        green_mask = ((h_lroi >= 30) & (h_lroi <= 93) & (s_lroi >= 30) & (v_lroi >= 100))
-        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 30)& (v_lroi >= 140))
+        green_mask = ((h_lroi >= 45) & (h_lroi <= 90) & (s_lroi >= 15) & (v_lroi >= 51))
+        red_mask = (((h_lroi <= 16) | (h_lroi >= 160)) & (s_lroi >= 30)& (v_lroi >= 80))
 
         # 2D binary images for moment calculation
         green_binary = np.zeros(lower_roi.shape[:2], dtype=np.uint8)
@@ -186,8 +238,8 @@ class LineFollowing(Node):
         s_uroi = upper_roi[:, :, 1]
         v_uroi = upper_roi[:, :, 2]
 
-        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 93) & (s_uroi >= 30) & (v_uroi >= 100))
-        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 30)& (v_uroi >= 140))
+        upper_green_mask = ((h_uroi >= 45) & (h_uroi <= 90) & (s_uroi >= 15) & (v_uroi >= 51))
+        upper_red_mask = (((h_uroi <= 16) | (h_uroi >= 160)) & (s_uroi >= 30)& (v_uroi >= 80))
 
         upper_green_binary = np.zeros(upper_roi.shape[:2], dtype=np.uint8)
         upper_green_binary[upper_green_mask] = 255

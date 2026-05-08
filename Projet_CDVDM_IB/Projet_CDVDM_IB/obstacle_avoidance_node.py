@@ -3,6 +3,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 import math
+from std_srvs.srv import SetBool
 
 class ObstacleAvoidance(Node):
     def __init__(self):
@@ -30,21 +31,34 @@ class ObstacleAvoidance(Node):
         self.avoid_steps     = 0      # Nombre de callbacks en rotation d'évitement
         self.return_steps    = 0      # Compteur de retour (même durée)
 
-        self.get_logger().info("Bottle Avoidance Node Started")
+        # controle de node
+        self.active = False
+        self.srv = self.create_service(SetBool, '/activate_obstacleavoidance', self.handle_activation)
+
+        #self.get_logger().info("Bottle Avoidance Node Started")
+
+    # Callback du service
+    def handle_activation(self, request, response):
+        self.active = request.data
+        response.success = True
+        response.message = f"Goal node state: {self.active}"
+        return response
 
     def safe_min(self, ranges_slice, default=float('inf')):
         filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0]
         return min(filtered) if filtered else default
 
     def lidar_callback(self, msg):
-        regions = {
-            'front'  : self.safe_min(msg.ranges[350:360] + msg.ranges[0:10]),
-            'fleft'  : self.safe_min(msg.ranges[11:50]),
-            'left'   : self.safe_min(msg.ranges[51:120]),
-            'right'  : self.safe_min(msg.ranges[240:310]),
-            'fright' : self.safe_min(msg.ranges[311:349]),
-        }
-        self.take_action(regions)
+        if self.active:
+            self.get_logger().info("Bottle Avoidance Node Started")
+            regions = {
+                'front'  : self.safe_min(msg.ranges[350:360] + msg.ranges[0:10]),
+                'fleft'  : self.safe_min(msg.ranges[11:50]),
+                'left'   : self.safe_min(msg.ranges[51:120]),
+                'right'  : self.safe_min(msg.ranges[240:310]),
+                'fright' : self.safe_min(msg.ranges[311:349]),
+            }
+            self.take_action(regions)
 
     def take_action(self, regions):
         twist = Twist()
