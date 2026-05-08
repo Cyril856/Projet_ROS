@@ -16,7 +16,7 @@ class LineFollowing(Node):
         super().__init__('compressed_image_subscriber')
         self.camera_sub = self.create_subscription(
             CompressedImage,
-            '/camera/image_raw/compressed',
+            '/image_raw/compressed', #/camera
             self.listener_callback,
             10
         )
@@ -28,7 +28,9 @@ class LineFollowing(Node):
             10
         )
     
-        #self.subscription  # to prevent unused variable warning
+        self.subscription  # to prevent unused variable warning
+
+        self.active = False
 
         self.message = Twist()
         self.publisher = self.create_publisher(Twist,'/cmd_vel',10)
@@ -37,12 +39,12 @@ class LineFollowing(Node):
         self.latest_scan = None
     
         self.image = None
-        self.horizon = 130
+        self.horizon = 275 #130
 
         self.middle_screen =  None
         self.middle_point = None
         self.steerdir = None
-        self.margin  = 160
+        self.margin  = 350 #160
 
         self.green_centroid = None
         self.red_centroid = None
@@ -53,6 +55,7 @@ class LineFollowing(Node):
         self.roundabout_mode= False
         self.roundabout_dir="L"
 
+        self.declare_parameter('RAB_direction',"L")
         self.declare_parameter('linear_scale', 1.0)
         self.declare_parameter('angular_scale',1.0)
 
@@ -253,7 +256,7 @@ class LineFollowing(Node):
         self.upper_green_centroid = upper_green_centroid if upper_green_centroid else None
         self.upper_red_centroid = upper_red_centroid if upper_red_centroid else None
 
-        if self.upper_green_centroid is not None and self.upper_red_centroid is not None and self.upper_green_centroid[0] > self.upper_red_centroid[0]:
+        if self.upper_green_centroid is not None and self.upper_red_centroid is not None and math.dist(self.upper_green_centroid,self.upper_red_centroid)<15:
             self.message.linear.x = 0.0
             self.message.angular.z = 0.0
             self.roundabout_mode=True
@@ -358,14 +361,14 @@ class LineFollowing(Node):
                 if self.roundabout_mode:
                     self.roundabout_protocol()
                     self.roundabout_mode = False
-                    self.margin = 300
-                    self.horizon = 275
+                    self.margin = 300 #180
+                    self.horizon = 200 #150
                 else:
                     image_hsv = self.hsv_segmentation(image.copy())
                     self.steer(image_hsv)
             time.sleep(0.05)
 
-    def roundabout_protocol(self,forward_time=2, turn_time=2):
+    def roundabout_protocol(self,forward_time=1, turn_time=1):
         if self.roundabout_dir=="R":
             linear_scale = self.get_parameter('linear_scale').value
             angular_scale = self.get_parameter('angular_scale').value

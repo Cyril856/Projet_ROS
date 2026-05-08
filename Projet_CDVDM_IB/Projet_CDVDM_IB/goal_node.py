@@ -30,6 +30,8 @@ class Goal(Node):
         self.message = Twist()
         self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
 
+        self.active = False
+
         self.image = None
         self.regions = {}
 
@@ -47,13 +49,13 @@ class Goal(Node):
     def hsv_segmentation(self, image):
         image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        lower_yellow = np.array([20, 80, 20])
+        lower_yellow = np.array([20, 100, 100])
         upper_yellow = np.array([35, 255, 255])
 
-        lower_red1 = np.array([0, 30, 20])
+        lower_red1 = np.array([0, 100, 50])
         upper_red1 = np.array([10, 255, 255])
 
-        lower_red2 = np.array([160, 30, 140])
+        lower_red2 = np.array([160, 100, 50])
         upper_red2 = np.array([179, 255, 255])
 
         mask_yellow = cv2.inRange(image_hsv, lower_yellow, upper_yellow)
@@ -108,18 +110,26 @@ class Goal(Node):
         if image is None:
             return
 
+        height = image.shape[0]
+        upper_limit = height // 2  # only look at top half for poles
+
         image_hsv, mask_yellow, mask_red = self.hsv_segmentation(image)
 
+        # Ball centroid from full image
         self.ball_centroid = self.centroid(mask_yellow)
 
+        # Poles from upper region only
+        mask_red_upper = mask_red[:upper_limit, :]
+
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
-            mask_red, connectivity=8
+            mask_red_upper, connectivity=8
         )
 
         min_area = 20
         pole_centroids = []
         for i in range(1, num_labels):
             if stats[i, cv2.CC_STAT_AREA] >= min_area:
+                # Offset Y back to full image coordinates
                 pole_centroids.append((int(centroids[i][0]), int(centroids[i][1])))
 
         if len(pole_centroids) >= 2:
@@ -182,43 +192,50 @@ class Goal(Node):
             if self.image is not None:
                 self.compute_centroids()
                 self.display()
-                
+
+                img_center = self.image.shape[1] // 2
                 msg = Twist()
-                
-                if self.ball_centroid is not None and self.goal_centroid is not None:
+
+                if self.ball_centroid is None:
+                    # No ball: spin to search
+                    self.get_logger().warn("No ball, searching...")
+                    msg.angular.z = 0.3
+
+                elif self.goal_centroid is None:
+                    # Ball visible but no goal: center on ball first
+                    ball_x = self.ball_centroid[0]
+                    drift = ball_x - img_center
+                    self.get_logger().warn(f"No goal, centering on ball | drift: {drift}")
+                    if abs(drift) > 20:
+                        msg.angular.z = -float(drift) / (img_center * 2)
+                    else:
+                        msg.linear.x = 0.05  # creep forward to find goal
+
+                else:
+                    # Both visible: align so ball is between robot and goal
                     ball_x = self.ball_centroid[0]
                     goal_x = self.goal_centroid[0]
-                    
-                    alignment_error = ball_x - goal_x
-                    
+                    drift = goal_x - ball_x  # steer robot toward goal center
 
-                    if alignment_error < -20: 
-                        msg.linear.x = -0.05   
-                        msg.angular.z = 0.2    
+                    self.get_logger().info(
+                        f"Aiming | ball_x: {ball_x} | goal_x: {goal_x} | drift: {drift}"
+                    )
 
-                    elif alignment_error > 20:
-                        msg.linear.x = -0.05   
-                        msg.angular.z = -0.2   
+                    if abs(drift) > 10:
+                        msg.angular.z = -float(drift) / (img_center * 2) * 0.5
+                        msg.linear.x = -0.03
+                        time.sleep(2)
+                        msg.angular.z= float(drift) / (img_center * 2) * 0.5
+                        msg.linear.x = 0.03
                     else:
-                        msg.linear.x = 0.15    
-                        msg.angular.z = 0.0
-                
-                elif self.ball_centroid is not None:
-                    img_center = self.image.shape[1] // 2
-                    if self.ball_centroid[0] < img_center - 20:
-                        msg.angular.z = 0.2
-                    elif self.ball_centroid[0] > img_center + 20:
-                        msg.angular.z = -0.2
-                    else:
-                        msg.linear.x = 0.05
-                else:
-                    
-                    msg.angular.z = 0.3
-                
+                            # Both aligned: shoot
+                            self.get_logger().info("SHOOTING!")
+                            msg.linear.x = 0.3
+                            msg.angular.z = 0.0
+
                 self.publisher.publish(msg)
 
             time.sleep(0.05)
-
 
 def main(args=None):
     rclpy.init(args=args)
