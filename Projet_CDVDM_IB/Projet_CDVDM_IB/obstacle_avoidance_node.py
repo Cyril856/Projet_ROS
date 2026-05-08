@@ -35,13 +35,11 @@ class ObstacleAvoidance(Node):
         self.active = False
         self.srv = self.create_service(SetBool, '/activate_obstacleavoidance', self.handle_activation)
 
-        #self.get_logger().info("Bottle Avoidance Node Started")
-
     # Callback du service
     def handle_activation(self, request, response):
         self.active = request.data
         response.success = True
-        response.message = f"Goal node state: {self.active}"
+        response.message = f"Obstalce avoidance node state: {self.active}"
         return response
 
     def safe_min(self, ranges_slice, default=float('inf')):
@@ -50,7 +48,7 @@ class ObstacleAvoidance(Node):
 
     def lidar_callback(self, msg):
         if self.active:
-            self.get_logger().info("Bottle Avoidance Node Started")
+            #self.get_logger().info("Bottle Avoidance Node Started")
             regions = {
                 'front'  : self.safe_min(msg.ranges[350:360] + msg.ranges[0:10]),
                 'fleft'  : self.safe_min(msg.ranges[11:50]),
@@ -152,7 +150,7 @@ def main(args=None):
         node.get_logger().info("Arrêt du nœud")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        #rclpy.shutdown() # ne pas activer sinon risque de shutdown toutes les nodes
 
 if __name__ == '__main__':
     main()

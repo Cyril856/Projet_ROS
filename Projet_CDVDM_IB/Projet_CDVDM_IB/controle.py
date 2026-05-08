@@ -13,23 +13,25 @@ class ProjectSequencer(Node):
         self.client_obstacleavoidance = self.create_client(SetBool, '/activate_obstacleavoidance')
         self.client_corridor = self.create_client(SetBool, '/activate_corridor')
         self.client_goal = self.create_client(SetBool, '/activate_goal') ## ajouter service dans la node
+        # pas de transition auto entre goal et mediapipe
         
         ## checker si un problème peut survenir s'il est appelé plusieurs fois pdt que l'autre node est activée
-        self.camera_sub = self.create_subscription(
-            CompressedImage,
-            '/camera/image_raw/compressed',
-            self.listener_callback,
-            10
-        )
+        # self.camera_sub = self.create_subscription(
+        #     CompressedImage,
+        #     '/camera/image_raw/compressed',
+        #     self.listener_callback,
+        #     10
+        # )
         self.blueline = False
         self.time_reset = datetime.datetime.now()
 
         #self.current_stage = 0  # Compteur de progression
-        self.declare_parameter('current_stage', 0) # paramètre pour âtre accessible depuis le terminal : à tester !!
+        self.declare_parameter('current_stage', 3) # paramètre pour âtre accessible depuis le terminal : à tester !!
         
-        self.check_logic() # 1er appel
+        #self.check_logic() # 1er appel ## cas ou on a la détection de ligne
 
         # Timer pour vérifier l'état du projet toutes les secondes
+        self.timer = self.create_timer(0.1, self.check_logic) ## à commenter lorsqu'on aura la détection de ligne
         ## checker si un problème peut survenir s'il est appelé plusieurs fois pdt que la node est activée
 
     def call_service(self, client, state):
@@ -39,30 +41,30 @@ class ProjectSequencer(Node):
         req.data = state
         client.call_async(req)
 
-    def listener_callback(self) :
-        current_stage = self.get_parameter('current_stage').value
+    # def listener_callback(self) :
+    #     current_stage = self.get_parameter('current_stage').value
         
-        ## blueline_detection
+    #     ## blueline_detection
         
-        #if bluelinedetect : self.blueline = True
-        #else : self.blueline = False
-        #
+    #     #if bluelinedetect : self.blueline = True
+    #     #else : self.blueline = False
+    #     #
 
-        # Decision
-        self.time_now = datetime.datetime.now()
+    #     # Decision
+    #     self.time_now = datetime.datetime.now()
 
-        dernier_appel = self.time_reset-self.time_now
+    #     dernier_appel = self.time_reset-self.time_now
 
-        self.get_logger().info(f"Le dernier_appel date d'il y a : {dernier_appel} sec")
+    #     self.get_logger().info(f"Le dernier_appel date d'il y a : {dernier_appel} sec")
 
-        if self.blueline and  dernier_appel > 3 : ## à calibrer, pas sur qu'il fonctionne
-            current_stage+=1
-            self.time_reset = datetime.datetime.now()
-            self.set_parameter('current_stage', current_stage)
-            self.check_logic()
+    #     if self.blueline and  dernier_appel > 3 : ## à calibrer, pas sur qu'il fonctionne
+    #         current_stage+=1
+    #         self.time_reset = datetime.datetime.now()
+    #         self.set_parameter('current_stage', current_stage)
+    #         self.check_logic()
 
-        else : # "pas de changement"
-            return
+    #     else : # "pas de changement"
+    #         return
 
     def check_logic(self):
         # Exemple de logique basée sur un compteur ou une condition
@@ -81,7 +83,11 @@ class ProjectSequencer(Node):
         
         elif current_stage == 3:
             self.call_service(self.client_corridor, False)
-            self.call_service(self.client_goal, True) ## ajouter  une condition d'arrêt ??
+            self.call_service(self.client_linefollowing, True)
+
+        elif current_stage == 4:
+            self.call_service(self.client_linefollowing, False)
+            self.call_service(self.client_goal, True) ## ajouter  une condition d'arrêt ?? dès qu'il passe les poteaux ?
 
         else : 
             self.get_logger().warn(f"état de challenge impossible : {current_stage}, recommencer")
@@ -95,7 +101,7 @@ def main(args=None):
         node.get_logger().info("Shutting down")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.shutdown() # le seul à l'avoir car il gère tout, dans le launch, son arrêt termine le programme de tt facon
 
 if __name__ == '__main__':
     main()

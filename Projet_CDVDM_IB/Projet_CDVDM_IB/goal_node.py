@@ -7,6 +7,7 @@ import time
 import math
 import cv2
 import threading
+from std_srvs.srv import SetBool
 
 from geometry_msgs.msg import Twist
 
@@ -40,7 +41,20 @@ class Goal(Node):
         self.right_pole_centroid = None
         self.goal_centroid = None
 
+        # controle de node
+        self.active = False
+        self.srv = self.create_service(SetBool, '/activate_goal', self.handle_activation)
+
+      # Callback du service
+    def handle_activation(self, request, response):
+        self.active = request.data
+        response.success = True
+        response.message = f"Goal node state: {self.active}"
+        return response
+
     def listener_callback(self, msg):
+        if not self.active:
+            return  # Ignore les images si la node est inactive
         np_arr = np.frombuffer(msg.data, np.uint8)
         image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if image is not None:
@@ -70,6 +84,8 @@ class Goal(Node):
         return min(filtered) if filtered else default
 
     def lidar_callback(self, msg):
+        if not self.active:
+            return  # Ignore les données LiDAR si la node est inactive
         self.regions = {
             'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),
             'fleft' : self.safe_min(msg.ranges[16:75]),
@@ -189,6 +205,13 @@ class Goal(Node):
     def run(self):
         self.get_logger().info("Goal node started")
         while rclpy.ok():
+
+            # Controle de node
+            if not self.active:
+                # Si inactive, on ne fait rien (mais on continue de tourner pour écouter les callbacks)
+                time.sleep(0.1)
+                continue
+
             if self.image is not None:
                 self.compute_centroids()
                 self.display()
@@ -250,7 +273,7 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        #rclpy.shutdown() # ne pas activer sinon risque de shutdown toutes les nodes
         cv2.destroyAllWindows()
 
 

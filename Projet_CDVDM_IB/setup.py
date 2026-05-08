@@ -33,7 +33,7 @@ setup(
             'obstacleavoidance = Projet_CDVDM_IB.obstacle_avoidance_node:main',
             'hsvtune = Projet_CDVDM_IB.hsv_calibration_node:main',
             'handteleop=Projet_CDVDM_IB.handteleop_node:main',
-            'srcdecontrole=Projet_CDVDM_IB.src_de_ctrl:main',
+            'controle=Projet_CDVDM_IB.controle:main',
             'mediapipe=Projet_CDVDM_IB.mediapipe_code:main',
         ],
     },

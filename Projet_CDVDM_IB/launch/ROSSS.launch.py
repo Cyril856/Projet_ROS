@@ -1,47 +1,53 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import Shutdown
 from launch_ros.actions import Node
 
 def generate_launch_description():
+    # Node principale qui gère l'activation/désactivation des autres
+    controle = Node(
+        package='Projet_CDVDM_IB',
+        executable='controle',
+        name='controle',  # Nom unique
+        output='screen',
+        # Si cette node s'arrête, le système s'arrête (optionnel)
+        on_exit=lambda event: Shutdown() if event.rc != 0 else None,
+    )
 
+    # Nodes gérées par 'controle' (pas de Shutdown automatique)
     linefollow = Node(
         package='Projet_CDVDM_IB',
         executable='linefollow',
-        name='Projet_CDVDM_IB',
+        name='linefollow',
         output='screen',
-        on_exit=Shutdown(),
+        # Pas de on_exit=Shutdown() pour permettre une gestion dynamique
     )
 
     obstacleavoidance = Node(
         package='Projet_CDVDM_IB',
         executable='obstacleavoidance',
-        name='Projet_CDVDM_IB',
+        name='obstacleavoidance', 
         output='screen',
-        on_exit=Shutdown(),
     )
 
-    # Create a launch description for the robot state publisher
     corridornavigation = Node(
         package='Projet_CDVDM_IB',
         executable='corridornavigation',
-        name='Projet_CDVDM_IB',
+        name='corridornavigation',
         output='screen',
     )
 
     goal = Node(
         package='Projet_CDVDM_IB',
         executable='goal',
-        name='Projet_CDVDM_IB',
+        name='goal',  
         output='screen',
-        on_exit=Shutdown(),
     )
 
     return LaunchDescription([
-
         linefollow,
         obstacleavoidance,
         corridornavigation,
-        goal
+        goal,
+        controle,
     ])

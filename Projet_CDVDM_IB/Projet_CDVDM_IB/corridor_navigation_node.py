@@ -39,7 +39,7 @@ class CorridorNavigation(Node):
 
     def lidar_callback(self, msg):
         if self.active:
-            self.get_logger().info("Corridor Node Started")
+            #self.get_logger().info("Corridor Node Started")
             regions = {
             'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),  # 30° devant
             'fleft' : self.safe_min(msg.ranges[16:75]),                      # 60° à gauche avant
@@ -118,7 +118,7 @@ def main(args=None):
         node.get_logger().info("Shutting down")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        #rclpy.shutdown() # ne pas activer sinon risque de shutdown toutes les nodes
 
 if __name__ == '__main__':
     main()
