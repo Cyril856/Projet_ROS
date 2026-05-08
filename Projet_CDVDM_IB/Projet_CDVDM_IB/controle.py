@@ -8,12 +8,11 @@ class ProjectSequencer(Node):
     def __init__(self):
         super().__init__('project_sequencer')
         
-        # Création des clients pour chaque défi(à part challenge 5)
-        self.client_linefollowing = self.create_client(SetBool, '/activate_linefollowing') ## ajouter service dans la node
+        # Création des clients pour chaque défi(à part challenge mediapipe) : pas de transition auto entre goal et mediapipe
+        self.client_linefollow = self.create_client(SetBool, '/activate_linefollow') ## ajouter service dans la node
         self.client_obstacleavoidance = self.create_client(SetBool, '/activate_obstacleavoidance')
         self.client_corridor = self.create_client(SetBool, '/activate_corridor')
         self.client_goal = self.create_client(SetBool, '/activate_goal') ## ajouter service dans la node
-        # pas de transition auto entre goal et mediapipe
         
         ## checker si un problème peut survenir s'il est appelé plusieurs fois pdt que l'autre node est activée
         # self.camera_sub = self.create_subscription(
@@ -71,10 +70,10 @@ class ProjectSequencer(Node):
         current_stage = self.get_parameter('current_stage').value
 
         if current_stage == 0:
-            self.call_service(self.client_linefollowing, True)
+            self.call_service(self.client_linefollow, True)
 
         elif current_stage == 1:
-            self.call_service(self.client_linefollowing, False)
+            self.call_service(self.client_linefollow, False)
             self.call_service(self.client_obstacleavoidance, True)
             
         elif current_stage == 2:
@@ -83,10 +82,10 @@ class ProjectSequencer(Node):
         
         elif current_stage == 3:
             self.call_service(self.client_corridor, False)
-            self.call_service(self.client_linefollowing, True)
+            self.call_service(self.client_linefollow, True)
 
         elif current_stage == 4:
-            self.call_service(self.client_linefollowing, False)
+            self.call_service(self.client_linefollow, False)
             self.call_service(self.client_goal, True) ## ajouter  une condition d'arrêt ?? dès qu'il passe les poteaux ?
 
         else : 
