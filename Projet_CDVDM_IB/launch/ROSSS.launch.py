@@ -4,8 +4,15 @@ from launch import LaunchDescription
 from launch.actions import Shutdown
 from launch_ros.actions import Node
 
-
 def generate_launch_description():
+
+    linefollow = Node(
+        package='Projet_CDVDM_IB',
+        executable='linefollow',
+        name='Projet_CDVDM_IB',
+        output='screen',
+        on_exit=Shutdown(),
+    )
 
     obstacleavoidance = Node(
         package='Projet_CDVDM_IB',
@@ -16,15 +23,25 @@ def generate_launch_description():
     )
 
     # Create a launch description for the robot state publisher
-    robot_state_pub = Node(
+    corridornavigation = Node(
         package='Projet_CDVDM_IB',
         executable='corridornavigation',
         name='Projet_CDVDM_IB',
         output='screen',
     )
 
+    goal = Node(
+        package='Projet_CDVDM_IB',
+        executable='goal',
+        name='Projet_CDVDM_IB',
+        output='screen',
+        on_exit=Shutdown(),
+    )
+
     return LaunchDescription([
 
+        linefollow,
         obstacleavoidance,
-        robot_state_pub
+        corridornavigation,
+        goal
     ])
