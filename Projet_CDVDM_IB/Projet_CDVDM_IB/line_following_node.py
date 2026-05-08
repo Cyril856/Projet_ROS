@@ -374,7 +374,7 @@ class LineFollowing(Node):
             # Controle de node
             if not self.active:
                 # Si inactive, on ne fait rien (mais on continue de tourner pour écouter les callbacks)
-                time.sleep(0.1)
+                time.sleep(0.1) ## à augmenter si trop faible 
                 continue
 
             self.get_logger().info(f"loop tick | image: {self.image is not None} | roundabout: {self.roundabout_mode}")

@@ -209,7 +209,7 @@ class Goal(Node):
             # Controle de node
             if not self.active:
                 # Si inactive, on ne fait rien (mais on continue de tourner pour écouter les callbacks)
-                time.sleep(0.1)
+                time.sleep(0.1) ## à augmenter si trop faible 
                 continue
 
             if self.image is not None:

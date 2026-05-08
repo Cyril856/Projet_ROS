@@ -26,12 +26,12 @@ class ProjectSequencer(Node):
         self.time_reset = datetime.datetime.now()
 
         #self.current_stage = 0  # Compteur de progression
-        self.declare_parameter('current_stage', 3) # paramètre pour âtre accessible depuis le terminal : à tester !!
+        self.declare_parameter('current_stage', 0) # paramètre pour âtre accessible depuis le terminal : à tester !!
         
         #self.check_logic() # 1er appel ## cas ou on a la détection de ligne
 
         # Timer pour vérifier l'état du projet toutes les secondes
-        self.timer = self.create_timer(0.1, self.check_logic) ## à commenter lorsqu'on aura la détection de ligne
+        self.timer = self.create_timer(1, self.check_logic) ## à commenter lorsqu'on aura la détection de ligne
         ## checker si un problème peut survenir s'il est appelé plusieurs fois pdt que la node est activée
 
     def call_service(self, client, state):
