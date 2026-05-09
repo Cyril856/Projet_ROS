@@ -5,6 +5,8 @@ import numpy as np
 import cv2
 import cv2
 import mediapipe as mp
+import time
+from std_srvs.srv import SetBool
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
@@ -33,9 +35,22 @@ class HandTeleop(Node):
             self.robot_callback,
             10
         )
-        self.timer = self.create_timer(0.03, self.robot_callback)
+        #self.timer = self.create_timer(0.03, self.robot_callback)
+
+        # controle de node
+        self.active = False
+        self.srv = self.create_service(SetBool, '/activate_handteleop', self.handle_activation)
+
+      # Callback du service
+    def handle_activation(self, request, response):
+        self.active = request.data
+        response.success = True
+        response.message = f"HandTeleop node state: {self.active}"
+        return response
 
     def robot_callback(self, msg):
+        if not self.active:
+            return  # Ignore les images si la node est inactive
         np_arr = np.frombuffer(msg.data, np.uint8)
         image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         if image is not None:
@@ -44,12 +59,20 @@ class HandTeleop(Node):
 
     def run(self):
         cap = cv2.VideoCapture("http://host.docker.internal:8080/video")
+        #cap = cv2.VideoCapture(0)
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         cap.set(cv2.CAP_PROP_FPS, 60)
 
         while rclpy.ok():
+
+            # Controle de node
+            if not self.active:
+                # Si inactive, on ne fait rien (mais on continue de tourner pour écouter les callbacks)
+                time.sleep(0.1) ## à augmenter si trop faible 
+                continue
+
             ret, frame = cap.read()
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) 
@@ -70,29 +93,39 @@ class HandTeleop(Node):
                     dx = index_tip.x - index_mcp.x
                     dy = index_tip.y - index_mcp.y
 
-                    if  abs(dy) > abs(dx): # horizontal movement dominates
+                    if  abs(dy) > abs(dx): # vertical movement dominates
+                        self.message.angular.z = 0.0
                         if dy > THRESHOLD:
-                            self.message.linear.x = -0.7
+                            self.message.linear.x = -0.15
+                            self.message.linear.z = 0.0
                             movement_text = "BACKWARD"
 
                         elif dy < -THRESHOLD:
-                            self.message.linear.x = 0.7
+                            self.message.linear.x = 0.15
+                            
                             movement_text = "FORWARD"
                             
                         else:
+                            self.message.linear.x = 0.0
+                            self.message.angular.z = 0.0
                             movement_text = "STOP"
-                    elif  abs(dx) > abs(dy): # vertical movement dominates
+
+                    elif  abs(dx) > abs(dy): # horizontal movement dominates
+                        self.message.linear.x = 0.0
                         if dx > THRESHOLD:
-                            self.message.angular.z = -0.7
+                            self.message.angular.z = -0.2
                             movement_text = "TURN RIGHT"
                         elif dx < -THRESHOLD:
-                            self.message.angular.z = 0.7
+                            self.message.angular.z = 0.2
                             movement_text = "TURN LEFT"
                             
                         else:
                             movement_text = "STOP"
+                            self.message.angular.z = 0.0
                     else:
                         movement_text = "STOP"
+                        self.message.linear.x = 0.0
+                        self.message.angular.z = 0.0
 
                     self.publisher.publish(self.message)
         
@@ -123,7 +156,7 @@ def main():
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        #rclpy.shutdown()
         cv2.destroyAllWindows()
 
 if __name__ == '__main__':

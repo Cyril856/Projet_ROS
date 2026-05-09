@@ -13,6 +13,7 @@ class ProjectSequencer(Node):
         self.client_obstacleavoidance = self.create_client(SetBool, '/activate_obstacleavoidance')
         self.client_corridor = self.create_client(SetBool, '/activate_corridor')
         self.client_goal = self.create_client(SetBool, '/activate_goal') ## ajouter service dans la node
+        self.client_handteleop = self.create_client(SetBool, '/activate_handteleop')
         
         ## checker si un problème peut survenir s'il est appelé plusieurs fois pdt que l'autre node est activée
         # self.camera_sub = self.create_subscription(
@@ -25,7 +26,7 @@ class ProjectSequencer(Node):
         self.time_reset = datetime.datetime.now()
 
         #self.current_stage = 0  # Compteur de progression
-        self.declare_parameter('current_stage', 0) # paramètre pour âtre accessible depuis le terminal : à tester !!
+        self.declare_parameter('current_stage', 5) # paramètre pour âtre accessible depuis le terminal : à tester !!
         
         #self.check_logic() # 1er appel ## cas ou on a la détection de ligne
 
@@ -87,6 +88,10 @@ class ProjectSequencer(Node):
         elif current_stage == 4:
             self.call_service(self.client_linefollow, False)
             self.call_service(self.client_goal, True) ## ajouter  une condition d'arrêt ?? dès qu'il passe les poteaux ?
+
+        elif current_stage == 5:
+            self.call_service(self.client_goal, False)
+            self.call_service(self.client_handteleop, True)
 
         else : 
             self.get_logger().warn(f"état de challenge impossible : {current_stage}, recommencer")

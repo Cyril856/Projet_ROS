@@ -35,6 +35,7 @@ setup(
             'handteleop=Projet_CDVDM_IB.handteleop_node:main',
             'controle=Projet_CDVDM_IB.controle:main',
             'mediapipe=Projet_CDVDM_IB.mediapipe_code:main',
+            'blueline=Projet_CDVDM_IB.blueline:main',
         ],
     },
 )

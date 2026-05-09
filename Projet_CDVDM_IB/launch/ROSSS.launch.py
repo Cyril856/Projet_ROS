@@ -44,10 +44,18 @@ def generate_launch_description():
         output='screen',
     )
 
+    handteleop = Node(
+        package='Projet_CDVDM_IB',
+        executable='handteleop',
+        name='handteleop',  
+        output='screen',
+    )
+
     return LaunchDescription([
         linefollow,
         obstacleavoidance,
         corridornavigation,
         goal,
+        handteleop,
         controle,
     ])
