@@ -23,6 +23,15 @@ def generate_launch_description():
         # Pas de on_exit=Shutdown() pour permettre une gestion dynamique
     )
 
+    # Nodes gérées par 'controle' (pas de Shutdown automatique)
+    blueline = Node(
+        package='Projet_CDVDM_IB',
+        executable='blueline',
+        name='blueline',
+        output='screen',
+        # Pas de on_exit=Shutdown() pour permettre une gestion dynamique
+    )
+
     obstacleavoidance = Node(
         package='Projet_CDVDM_IB',
         executable='obstacleavoidance',
@@ -53,6 +62,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         linefollow,
+        blueline,
         obstacleavoidance,
         corridornavigation,
         goal,

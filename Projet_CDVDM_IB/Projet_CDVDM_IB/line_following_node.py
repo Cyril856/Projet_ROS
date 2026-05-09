@@ -9,13 +9,23 @@ import cv2
 import threading
 from std_srvs.srv import SetBool
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Image # pour gazebo
+from cv_bridge import CvBridge # pour gazebo
+
+
 
 class LineFollowing(Node):
     def __init__(self):
         super().__init__('compressed_image_subscriber')
+        
+        # Gazebo
+        self.bridge = CvBridge()
+
         self.camera_sub = self.create_subscription(
-            CompressedImage,
-            '/camera/image_raw/compressed', #
+            #CompressedImage,
+            Image,
+            #'/camera/image_raw/compressed',
+            '/image_raw', # en simu !
             self.listener_callback,
             10
         )
@@ -115,9 +125,11 @@ class LineFollowing(Node):
         msg = latest_image
         
         # Convertir les données compressées en tableau numpy
+        
         np_arr = np.frombuffer(msg.data, np.uint8)
         # Décoder l'image
-        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        #image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
         if image is not None:
             self.image = image

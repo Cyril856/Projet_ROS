@@ -38,16 +38,17 @@ class CorridorNavigation(Node):
         return min(filtered) if filtered else default
 
     def lidar_callback(self, msg):
-        if self.active:
-            #self.get_logger().info("Corridor Node Started")
-            regions = {
-            'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),  # 30° devant
-            'fleft' : self.safe_min(msg.ranges[16:75]),                      # 60° à gauche avant
-            'left'  : self.safe_min(msg.ranges[76:120]),                     # 45° à gauche
-            'right' : self.safe_min(msg.ranges[240:285]),                    # 45° à droite
-            'fright': self.safe_min(msg.ranges[286:345])                    # 60° à droite avant  
-            }
-            self.take_action(regions)
+        if not self.active:
+            return  # Ignore les données LiDAR si la node est inactive
+        #self.get_logger().info("Corridor Node Started")
+        regions = {
+        'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),  # 30° devant
+        'fleft' : self.safe_min(msg.ranges[16:75]),                      # 60° à gauche avant
+        'left'  : self.safe_min(msg.ranges[76:120]),                     # 45° à gauche
+        'right' : self.safe_min(msg.ranges[240:285]),                    # 45° à droite
+        'fright': self.safe_min(msg.ranges[286:345])                    # 60° à droite avant  
+        }
+        self.take_action(regions)
 
     def take_action(self, regions):
         twist = Twist()

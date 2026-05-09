@@ -8,15 +8,20 @@ import math
 import cv2
 import threading
 from std_srvs.srv import SetBool
-
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Image # pour gazebo
+from cv_bridge import CvBridge # pour gazebo
 
 class Goal(Node):
     def __init__(self):
         super().__init__('goal_node')
-        self.subscription = self.create_subscription(
-            CompressedImage,
-            '/camera/image_raw/compressed', #
+        ## Gazebo
+        self.bridge = CvBridge()
+        self.camera_sub = self.create_subscription(
+            #CompressedImage,
+            Image,
+            #'/camera/image_raw/compressed',
+            '/image_raw', # en simu !
             self.listener_callback,
             10
         )
@@ -57,7 +62,11 @@ class Goal(Node):
         if not self.active:
             return  # Ignore les images si la node est inactive
         np_arr = np.frombuffer(msg.data, np.uint8)
-        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        
+        # Décoder l'image
+        #image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR) 
+        image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8') ## gazebo
+
         if image is not None:
             self.image = image.copy()
 
