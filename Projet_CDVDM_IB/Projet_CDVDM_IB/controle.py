@@ -26,7 +26,7 @@ class ProjectSequencer(Node):
         self.time_reset = datetime.datetime.now()
 
         #self.current_stage = 0  # Compteur de progression
-        self.declare_parameter('current_stage', 5) # paramètre pour âtre accessible depuis le terminal : à tester !!
+        self.declare_parameter('current_stage', 4) # paramètre pour âtre accessible depuis le terminal : à tester !!
         
         #self.check_logic() # 1er appel ## cas ou on a la détection de ligne
 

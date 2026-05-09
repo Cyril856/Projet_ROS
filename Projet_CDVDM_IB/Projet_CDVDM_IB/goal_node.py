@@ -16,7 +16,7 @@ class Goal(Node):
         super().__init__('goal_node')
         self.subscription = self.create_subscription(
             CompressedImage,
-            '/image_raw/compressed', #/camera
+            '/camera/image_raw/compressed', #
             self.listener_callback,
             10
         )
@@ -37,6 +37,7 @@ class Goal(Node):
         self.regions = {}
 
         self.ball_centroid = None
+        self.ball_detected = False
         self.left_pole_centroid = None
         self.right_pole_centroid = None
         self.goal_centroid = None
@@ -63,14 +64,14 @@ class Goal(Node):
     def hsv_segmentation(self, image):
         image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        lower_yellow = np.array([20, 100, 100])
+        lower_yellow = np.array([20, 100, 40])
         upper_yellow = np.array([35, 255, 255])
 
-        lower_red1 = np.array([0, 100, 50])
-        upper_red1 = np.array([10, 255, 255])
+        lower_red1 = np.array([0, 130, 30])
+        upper_red1 = np.array([10, 255, 150])
 
-        lower_red2 = np.array([160, 100, 50])
-        upper_red2 = np.array([179, 255, 255])
+        lower_red2 = np.array([160, 130, 30])
+        upper_red2 = np.array([179, 255, 150])
 
         mask_yellow = cv2.inRange(image_hsv, lower_yellow, upper_yellow)
         mask_red1   = cv2.inRange(image_hsv, lower_red1,   upper_red1)
@@ -145,7 +146,6 @@ class Goal(Node):
         pole_centroids = []
         for i in range(1, num_labels):
             if stats[i, cv2.CC_STAT_AREA] >= min_area:
-                # Offset Y back to full image coordinates
                 pole_centroids.append((int(centroids[i][0]), int(centroids[i][1])))
 
         if len(pole_centroids) >= 2:
@@ -204,59 +204,65 @@ class Goal(Node):
 
     def run(self):
         self.get_logger().info("Goal node started")
+        last_angular = 0.0
+        
         while rclpy.ok():
-
-            # Controle de node
             if not self.active:
-                # Si inactive, on ne fait rien (mais on continue de tourner pour écouter les callbacks)
-                time.sleep(0.1) ## à augmenter si trop faible 
+                time.sleep(0.1)
                 continue
 
             if self.image is not None:
                 self.compute_centroids()
                 self.display()
-
-                img_center = self.image.shape[1] // 2
+                
                 msg = Twist()
+                img_center = self.image.shape[1] // 2
 
-                if self.ball_centroid is None:
-                    # No ball: spin to search
-                    self.get_logger().warn("No ball, searching...")
-                    msg.angular.z = 0.3
-
-                elif self.goal_centroid is None:
-                    # Ball visible but no goal: center on ball first
+                # CAS 1 : On voit la balle (et idéalement le but)
+                if self.ball_centroid is not None:
+                    self.ball_detected=True
                     ball_x = self.ball_centroid[0]
-                    drift = ball_x - img_center
-                    self.get_logger().warn(f"No goal, centering on ball | drift: {drift}")
-                    if abs(drift) > 20:
-                        msg.angular.z = -float(drift) / (img_center * 2)
+                    
+                    # Si on voit aussi le but, on calcule l'alignement
+                    if self.goal_centroid is not None:
+                        target_x = self.goal_centroid[0]
+                        error = ball_x - target_x
                     else:
-                        msg.linear.x = 0.05  # creep forward to find goal
+                        if self.left_pole_centroid is not None:
+                            error = 1.2 * (ball_x - self.left_pole_centroid[0])+10
+                        elif self.right_pole_centroid is not None:
+                            error = 1.2 * (ball_x - self.right_pole_centroid[0])-10
+                        else:
+                            self.get_logger().info("Looking for pole and centering on ball")
+                            error=ball_x - img_center
+                            msg.angular.z = float(error) / img_center * 0.5 + 0.1
+
+                    msg.angular.z = -float(error) / img_center * 0.5
+                    msg.linear.x = 0.05# Il avance toujours vers la balle
+                    last_angular = msg.angular.z # On mémorise la direction
 
                 else:
-                    # Both visible: align so ball is between robot and goal
-                    ball_x = self.ball_centroid[0]
-                    goal_x = self.goal_centroid[0]
-                    drift = goal_x - ball_x  # steer robot toward goal center
-
-                    self.get_logger().info(
-                        f"Aiming | ball_x: {ball_x} | goal_x: {goal_x} | drift: {drift}"
-                    )
-
-                    if abs(drift) > 10:
-                        msg.angular.z = -float(drift) / (img_center * 2) * 0.5
-                        msg.linear.x = -0.03
-                        time.sleep(2)
-                        msg.angular.z= float(drift) / (img_center * 2) * 0.5
-                        msg.linear.x = 0.03
+                    if not self.ball_detected:
+                        self.get_logger().info("Looking for ball")
+                        msg.angular.z=-0.5
                     else:
-                            # Both aligned: shoot
-                            self.get_logger().info("SHOOTING!")
-                            msg.linear.x = 0.3
-                            msg.angular.z = 0.0
+                        if self.left_pole_centroid is not None and self.left_pole_centroid[1]>100:
+                            self.get_logger().info("Ball received and heading for goal")
+                            msg.linear.x = 0.07
+                            msg.angular.z = last_angular * 0.05 
+                        elif self.left_pole_centroid is not None:
+                            error = 1.2 * (ball_x - self.left_pole_centroid[0])+10
+                            msg.angular.z = -float(error) / img_center * 0.5
+                        elif self.right_pole_centroid is not None:
+                            error = 1.2 * (ball_x - self.right_pole_centroid[0])-10
+                            msg.angular.z = -float(error) / img_center * 0.5
+                        else:
+                            time.sleep(3)
+                            msg.angular.z=0.0
+                            msg.linear.x=0.0
 
                 self.publisher.publish(msg)
+                    
 
             time.sleep(0.05)
 

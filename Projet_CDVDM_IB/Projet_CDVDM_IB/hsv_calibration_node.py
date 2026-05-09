@@ -5,7 +5,6 @@ import numpy as np
 import cv2
 import threading
 
-
 class HSVCalibration(Node):
     def __init__(self):
         super().__init__('hsv_calibration')
@@ -17,8 +16,9 @@ class HSVCalibration(Node):
         )
 
         self.image = None
+        self.horizon_y = 130
 
-        # Create windows
+        # Création des fenêtres
         cv2.namedWindow("Original")
         cv2.namedWindow("Mask")
         cv2.namedWindow("HSV Calibration")
@@ -30,22 +30,24 @@ class HSVCalibration(Node):
         cv2.createTrackbar("Red H max2", "HSV Calibration", 179, 179, self.nothing)
         cv2.createTrackbar("Red S min",  "HSV Calibration", 20,  255, self.nothing)
         cv2.createTrackbar("Red S max",  "HSV Calibration", 255, 255, self.nothing)
-        cv2.createTrackbar("Red V min",  "HSV Calibration", 20,  255, self.nothing)
+        cv2.createTrackbar("Red V min",  "HSV Calibration", 140, 255, self.nothing)
         cv2.createTrackbar("Red V max",  "HSV Calibration", 255, 255, self.nothing)
 
         # --- Green trackbars ---
-        cv2.createTrackbar("Green H min", "HSV Calibration", 30,  179, self.nothing)
-        cv2.createTrackbar("Green H max", "HSV Calibration", 90,  179, self.nothing)
+        cv2.createTrackbar("Green H min", "HSV Calibration", 40,  179, self.nothing)
+        cv2.createTrackbar("Green H max", "HSV Calibration", 80,  179, self.nothing)
         cv2.createTrackbar("Green S min", "HSV Calibration", 20,  255, self.nothing)
         cv2.createTrackbar("Green S max", "HSV Calibration", 255, 255, self.nothing)
-        cv2.createTrackbar("Green V min", "HSV Calibration", 20,  255, self.nothing)
+        cv2.createTrackbar("Green V min", "HSV Calibration", 100, 255, self.nothing)
         cv2.createTrackbar("Green V max", "HSV Calibration", 255, 255, self.nothing)
 
-        # Toggle which color to preview
-        # 0 = red, 1 = green, 2 = both
-        cv2.createTrackbar("Preview: 0=R 1=G 2=Both", "HSV Calibration", 2, 2, self.nothing)
-
-        self.get_logger().info("HSV Calibration node started. Press 'p' to print current values, 'q' to quit.")
+        # --- Yellow trackbars (Nouveau) ---
+        cv2.createTrackbar("Yellow H min", "HSV Calibration", 20,  179, self.nothing)
+        cv2.createTrackbar("Yellow H max", "HSV Calibration", 35,  179, self.nothing)
+        cv2.createTrackbar("Yellow S min", "HSV Calibration", 100, 255, self.nothing)
+        cv2.createTrackbar("Yellow S max", "HSV Calibration", 255, 255, self.nothing)
+        cv2.createTrackbar("Yellow V min", "HSV Calibration", 100, 255, self.nothing)
+        cv2.createTrackbar("Yellow V max", "HSV Calibration", 255, 255, self.nothing)
 
     def nothing(self, x):
         pass
@@ -57,101 +59,72 @@ class HSVCalibration(Node):
             self.image = image.copy()
 
     def get_trackbar_values(self):
-        r_h_min1 = cv2.getTrackbarPos("Red H min1", "HSV Calibration")
-        r_h_max1 = cv2.getTrackbarPos("Red H max1", "HSV Calibration")
-        r_h_min2 = cv2.getTrackbarPos("Red H min2", "HSV Calibration")
-        r_h_max2 = cv2.getTrackbarPos("Red H max2", "HSV Calibration")
-        r_s_min  = cv2.getTrackbarPos("Red S min",  "HSV Calibration")
-        r_s_max  = cv2.getTrackbarPos("Red S max",  "HSV Calibration")
-        r_v_min  = cv2.getTrackbarPos("Red V min",  "HSV Calibration")
-        r_v_max  = cv2.getTrackbarPos("Red V max",  "HSV Calibration")
-
-        g_h_min  = cv2.getTrackbarPos("Green H min", "HSV Calibration")
-        g_h_max  = cv2.getTrackbarPos("Green H max", "HSV Calibration")
-        g_s_min  = cv2.getTrackbarPos("Green S min", "HSV Calibration")
-        g_s_max  = cv2.getTrackbarPos("Green S max", "HSV Calibration")
-        g_v_min  = cv2.getTrackbarPos("Green V min", "HSV Calibration")
-        g_v_max  = cv2.getTrackbarPos("Green V max", "HSV Calibration")
-
-        preview  = cv2.getTrackbarPos("Preview: 0=R 1=G 2=Both", "HSV Calibration")
-
-        return {
-            "red1":   (r_h_min1, r_h_max1, r_s_min, r_s_max, r_v_min, r_v_max),
-            "red2":   (r_h_min2, r_h_max2, r_s_min, r_s_max, r_v_min, r_v_max),
-            "green":  (g_h_min,  g_h_max,  g_s_min, g_s_max, g_v_min, g_v_max),
-            "preview": preview
+        values = {
+            'red': [
+                cv2.getTrackbarPos("Red H min1", "HSV Calibration"),
+                cv2.getTrackbarPos("Red H max1", "HSV Calibration"),
+                cv2.getTrackbarPos("Red H min2", "HSV Calibration"),
+                cv2.getTrackbarPos("Red H max2", "HSV Calibration"),
+                cv2.getTrackbarPos("Red S min",  "HSV Calibration"),
+                cv2.getTrackbarPos("Red S max",  "HSV Calibration"),
+                cv2.getTrackbarPos("Red V min",  "HSV Calibration"),
+                cv2.getTrackbarPos("Red V max",  "HSV Calibration")
+            ],
+            'green': [
+                cv2.getTrackbarPos("Green H min", "HSV Calibration"),
+                cv2.getTrackbarPos("Green H max", "HSV Calibration"),
+                cv2.getTrackbarPos("Green S min", "HSV Calibration"),
+                cv2.getTrackbarPos("Green S max", "HSV Calibration"),
+                cv2.getTrackbarPos("Green V min", "HSV Calibration"),
+                cv2.getTrackbarPos("Green V max", "HSV Calibration")
+            ],
+            'yellow': [
+                cv2.getTrackbarPos("Yellow H min", "HSV Calibration"),
+                cv2.getTrackbarPos("Yellow H max", "HSV Calibration"),
+                cv2.getTrackbarPos("Yellow S min", "HSV Calibration"),
+                cv2.getTrackbarPos("Yellow S max", "HSV Calibration"),
+                cv2.getTrackbarPos("Yellow V min", "HSV Calibration"),
+                cv2.getTrackbarPos("Yellow V max", "HSV Calibration")
+            ]
         }
+        return values
 
-    def print_values(self, vals):
-        r1 = vals["red1"]
-        r2 = vals["red2"]
-        g  = vals["green"]
-        print("\n--- Current HSV values ---")
-        print(f"lower_red1  = np.array([{r1[0]}, {r1[2]}, {r1[4]}])")
-        print(f"upper_red1  = np.array([{r1[1]}, {r1[3]}, {r1[5]}])")
-        print(f"lower_red2  = np.array([{r2[0]}, {r2[2]}, {r2[4]}])")
-        print(f"upper_red2  = np.array([{r2[1]}, {r2[3]}, {r2[5]}])")
-        print(f"lower_green = np.array([{g[0]},  {g[2]},  {g[4]}])")
-        print(f"upper_green = np.array([{g[1]},  {g[3]},  {g[5]}])")
-        print("--------------------------\n")
+    def print_values(self, v):
+        print("\n" + "="*50)
+        print("COPIER-COLLER DANS line_following_node.py :")
+        print("="*50)
+        print(f"self.horizon = {self.horizon_y}")
+        print(f"self.lower_red1 = np.array([{v['red'][0]}, {v['red'][4]}, {v['red'][6]}])")
+        print(f"self.upper_red1 = np.array([{v['red'][1]}, {v['red'][5]}, {v['red'][7]}])")
+        print(f"self.lower_red2 = np.array([{v['red'][2]}, {v['red'][4]}, {v['red'][6]}])")
+        print(f"self.upper_red2 = np.array([{v['red'][3]}, {v['red'][5]}, {v['red'][7]}])")
+        print(f"self.lower_green = np.array([{v['green'][0]}, {v['green'][2]}, {v['green'][4]}])")
+        print(f"self.upper_green = np.array([{v['green'][1]}, {v['green'][3]}, {v['green'][5]}])")
+        print(f"self.lower_yellow = np.array([{v['yellow'][0]}, {v['yellow'][2]}, {v['yellow'][4]}])")
+        print(f"self.upper_yellow = np.array([{v['yellow'][1]}, {v['yellow'][3]}, {v['yellow'][5]}])")
+        print("="*50 + "\n")
 
     def run(self):
         rate = self.create_rate(20)
-
         while rclpy.ok():
-            image = self.image
-            if image is not None:
-                vals = self.get_trackbar_values()
-                image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            if self.image is not None:
+                image = self.image.copy()
+                hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+                v = self.get_trackbar_values()
 
-                r1 = vals["red1"]
-                r2 = vals["red2"]
-                g  = vals["green"]
+                # Masques
+                m_r1 = cv2.inRange(hsv, np.array([v['red'][0], v['red'][4], v['red'][6]]), np.array([v['red'][1], v['red'][5], v['red'][7]]))
+                m_r2 = cv2.inRange(hsv, np.array([v['red'][2], v['red'][4], v['red'][6]]), np.array([v['red'][3], v['red'][5], v['red'][7]]))
+                mask_red = m_r1 | m_r2
+                mask_green = cv2.inRange(hsv, np.array([v['green'][0], v['green'][2], v['green'][4]]), np.array([v['green'][1], v['green'][3], v['green'][5]]))
+                mask_yellow = cv2.inRange(hsv, np.array([v['yellow'][0], v['yellow'][2], v['yellow'][4]]), np.array([v['yellow'][1], v['yellow'][3], v['yellow'][5]]))
 
-                mask_red1  = cv2.inRange(image_hsv,
-                    np.array([r1[0], r1[2], r1[4]]),
-                    np.array([r1[1], r1[3], r1[5]]))
-                mask_red2  = cv2.inRange(image_hsv,
-                    np.array([r2[0], r2[2], r2[4]]),
-                    np.array([r2[1], r2[3], r2[5]]))
-                mask_green = cv2.inRange(image_hsv,
-                    np.array([g[0],  g[2],  g[4]]),
-                    np.array([g[1],  g[3],  g[5]]))
-
-                mask_red = cv2.bitwise_or(mask_red1, mask_red2)
-
-                preview = vals["preview"]
-                if preview == 0:
-                    mask = mask_red
-                elif preview == 1:
-                    mask = mask_green
-                else:
-                    mask = cv2.bitwise_or(mask_red, mask_green)
-
-                result = cv2.bitwise_and(image, image, mask=mask)
-
-                # Compute centroids from full image masks
-                green_binary = mask_green
-                red_binary   = mask_red
-
-                green_c = self.centroid(green_binary)
-                red_c   = self.centroid(red_binary)
-
-                # Draw on result
-                if green_c is not None:
-                    cv2.circle(result, green_c, 7, (0, 255, 0), -1)
-                    cv2.putText(result, f"G({green_c[0]},{green_c[1]})",
-                                (green_c[0] + 10, green_c[1]),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
-
-                if red_c is not None:
-                    cv2.circle(result, red_c, 7, (0, 0, 255), -1)
-                    cv2.putText(result, f"R({red_c[0]},{red_c[1]})",
-                                (red_c[0] + 10, red_c[1]),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-
-                if green_c is not None and red_c is not None:
-                    cv2.line(result, green_c, red_c, (255, 255, 255), 1)
+                # Visualisation
+                result = cv2.bitwise_or(cv2.bitwise_or(mask_red, mask_green), mask_yellow)
+                
+                # Dessin de l'horizon sur l'image originale
+                cv2.line(image, (0, self.horizon_y), (image.shape[1], self.horizon_y), (255, 0, 0), 2)
+                cv2.putText(image, "HORIZON 130", (10, self.horizon_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
                 cv2.imshow("Original", image)
                 cv2.imshow("Mask", result)
@@ -161,34 +134,16 @@ class HSVCalibration(Node):
                 self.print_values(self.get_trackbar_values())
             elif key == ord('q'):
                 break
-
             rate.sleep()
-
-    def centroid(self, image_bin):
-        M = cv2.moments(image_bin)
-        if M["m00"] == 0:
-            return None
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-        return cX, cY
-
 
 def main(args=None):
     rclpy.init(args=args)
     node = HSVCalibration()
-
     thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     thread.start()
-
-    try:
-        node.run()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-        cv2.destroyAllWindows()
-
+    node.run()
+    node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

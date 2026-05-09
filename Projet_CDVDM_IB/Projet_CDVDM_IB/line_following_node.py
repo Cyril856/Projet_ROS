@@ -15,7 +15,7 @@ class LineFollowing(Node):
         super().__init__('compressed_image_subscriber')
         self.camera_sub = self.create_subscription(
             CompressedImage,
-            '/image_raw/compressed', #/camera
+            '/camera/image_raw/compressed', #
             self.listener_callback,
             10
         )
@@ -29,7 +29,6 @@ class LineFollowing(Node):
     
         #self.subscription  # to prevent unused variable warning
 
-        self.active = False
 
         self.message = Twist()
         self.publisher = self.create_publisher(Twist,'/cmd_vel',10)
@@ -38,12 +37,12 @@ class LineFollowing(Node):
         self.latest_scan = None
     
         self.image = None
-        self.horizon = 275 #130
+        self.horizon =130 #275 #
 
         self.middle_screen =  None
         self.middle_point = None
         self.steerdir = None
-        self.margin  = 350 #160
+        self.margin  =135 #350 #
 
         self.green_centroid = None
         self.red_centroid = None
@@ -52,14 +51,15 @@ class LineFollowing(Node):
         self.upper_red_centroid = None
 
         self.roundabout_mode= False
-        self.roundabout_dir="L"
+        self.roundabout_count=0
+        self.roundabout_dir="R"
 
         self.declare_parameter('RAB_direction',"L")
         self.declare_parameter('linear_scale', 1.0)
         self.declare_parameter('angular_scale',1.0)
 
         # STOP
-        self.declare_parameter('emergency_stop_dist', 0.1)
+        self.declare_parameter('emergency_stop_dist', 0.3)
         self.emergency_stop_dist = self.get_parameter('emergency_stop_dist').value
         self.stop = False
 
@@ -67,7 +67,7 @@ class LineFollowing(Node):
         self.sync_timer = self.create_timer(0.1, self.check_sync)
 
         # controle de node
-        self.active = False
+        self.active = True
         self.srv = self.create_service(SetBool, '/activate_linefollow', self.handle_activation)
 
       # Callback du service
@@ -192,14 +192,14 @@ class LineFollowing(Node):
     def hsv_segmentation(self,image):
             image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-            lower_red1 = np.array([0, 76, 80])
+            lower_red1 = np.array([0, 50, 50])
             upper_red1 = np.array([16, 255, 255])
 
-            lower_red2 = np.array([160, 80, 80])
+            lower_red2 = np.array([160, 50, 50])
             upper_red2 = np.array([179, 255, 255])
 
-            lower_green = np.array([45, 15, 51])
-            upper_green = np.array([90, 255, 255])
+            lower_green = np.array([30, 50, 50])
+            upper_green = np.array([94, 255, 255])
 
             mask_red1 = cv2.inRange(image_hsv, lower_red1, upper_red1)
             mask_red2 = cv2.inRange(image_hsv, lower_red2, upper_red2)
@@ -230,8 +230,8 @@ class LineFollowing(Node):
         s_lroi = lower_roi[:, :, 1]
         v_lroi = lower_roi[:, :, 2]
 
-        green_mask = ((h_lroi >= 45) & (h_lroi <= 90) & (s_lroi >= 15) & (v_lroi >= 51))
-        red_mask = (((h_lroi <= 16) | (h_lroi >= 160)) & (s_lroi >= 30)& (v_lroi >= 80))
+        green_mask = ((h_lroi >= 30) & (h_lroi <= 94) & (s_lroi >= 50) & (v_lroi >= 50))
+        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 50)& (v_lroi >= 50))
 
         # 2D binary images for moment calculation
         green_binary = np.zeros(lower_roi.shape[:2], dtype=np.uint8)
@@ -257,8 +257,8 @@ class LineFollowing(Node):
         s_uroi = upper_roi[:, :, 1]
         v_uroi = upper_roi[:, :, 2]
 
-        upper_green_mask = ((h_uroi >= 45) & (h_uroi <= 90) & (s_uroi >= 15) & (v_uroi >= 51))
-        upper_red_mask = (((h_uroi <= 16) | (h_uroi >= 160)) & (s_uroi >= 30)& (v_uroi >= 80))
+        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 94) & (s_uroi >= 50) & (v_uroi >= 50))
+        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 50)& (v_uroi >= 50))
 
         upper_green_binary = np.zeros(upper_roi.shape[:2], dtype=np.uint8)
         upper_green_binary[upper_green_mask] = 255
@@ -271,8 +271,16 @@ class LineFollowing(Node):
         # No horizon offset needed since upper ROI starts at row 0
         self.upper_green_centroid = upper_green_centroid if upper_green_centroid else None
         self.upper_red_centroid = upper_red_centroid if upper_red_centroid else None
+        
+        RAB_cond=(
+            self.upper_green_centroid is not None and 
+            self.upper_red_centroid is not None and 
+            self.upper_green_centroid[0] > self.upper_red_centroid[0] and 
+            abs(self.upper_green_centroid[0] - self.upper_red_centroid[0]) < 120 and 
+            abs(self.upper_green_centroid[1] - self.upper_red_centroid[1]) < 20
+        )
 
-        if self.upper_green_centroid is not None and self.upper_red_centroid is not None and math.dist(self.upper_green_centroid,self.upper_red_centroid)<15:
+        if RAB_cond:
             self.message.linear.x = 0.0
             self.message.angular.z = 0.0
             self.roundabout_mode=True
@@ -303,10 +311,6 @@ class LineFollowing(Node):
             fifth_screen < red_centroid[0] < 4 * fifth_screen                        
         )
 
-        if green_valid:
-            self.last_green_center = green_centroid[0]
-        if red_valid:
-            self.last_red_center = red_centroid[0]
 
         if green_valid and red_valid:
             # Both lines visible: steer to middle of segment between them
@@ -341,8 +345,8 @@ class LineFollowing(Node):
         ang_gain = 1.0
         lin_gain = 0.75
         if green_center or red_center:
-            ang_gain = 5.5  # increase this to taste
-            lin_gain = 0.8
+            ang_gain = 5.0 # increase this to taste
+            lin_gain = 0.85
         else:
             ang_gain = 1.0
             lin_gain = 0.75
@@ -358,7 +362,6 @@ class LineFollowing(Node):
     def centroid(self, image_bin):
         M = cv2.moments(image_bin)
 
-        # Avoid division by zero if mask is empty
         if M["m00"] == 0:
             return None
 
@@ -376,29 +379,30 @@ class LineFollowing(Node):
                 # Si inactive, on ne fait rien (mais on continue de tourner pour écouter les callbacks)
                 time.sleep(0.1) ## à augmenter si trop faible 
                 continue
-
+            
             self.get_logger().info(f"loop tick | image: {self.image is not None} | roundabout: {self.roundabout_mode}")
             image = self.image
             if image is not None:
                 self.get_logger().info("image received, calling steer...")
-                if self.roundabout_mode:
+                if self.roundabout_mode and self.roundabout_count<1:
                     self.roundabout_protocol()
+                    self.roundabout_count+=1
                     self.roundabout_mode = False
-                    self.margin = 300 #180
-                    self.horizon = 200 #150
+                    self.margin = 180 #300 #
+                    self.horizon = 150 #200 #
                 else:
                     image_hsv = self.hsv_segmentation(image.copy())
                     self.steer(image_hsv)
             time.sleep(0.05)
 
-    def roundabout_protocol(self,forward_time=1, turn_time=1):
+    def roundabout_protocol(self,forward_time=2.75, turn_time=2):
         if self.roundabout_dir=="R":
             linear_scale = self.get_parameter('linear_scale').value
             angular_scale = self.get_parameter('angular_scale').value
 
             # Go forward
             self.get_logger().info("go_and_turn: moving forward...")
-            self.message.linear.x = 0.15 * linear_scale
+            self.message.linear.x = 0.07 * linear_scale
             self.message.angular.z = 0.0
             self.publisher.publish(self.message)
             time.sleep(forward_time)
@@ -406,7 +410,7 @@ class LineFollowing(Node):
             # Turn right
             self.get_logger().info("go_and_turn: turning right...")
             self.message.linear.x = 0.0
-            self.message.angular.z = -0.75 * angular_scale
+            self.message.angular.z = -0.6 * angular_scale
             self.publisher.publish(self.message)
             time.sleep(turn_time)
 
@@ -421,7 +425,7 @@ class LineFollowing(Node):
 
             # Go forward
             self.get_logger().info("go_and_turn: moving forward...")
-            self.message.linear.x = 0.15 * linear_scale
+            self.message.linear.x = 0.07 * linear_scale
             self.message.angular.z = 0.0
             self.publisher.publish(self.message)
             time.sleep(forward_time)
@@ -429,7 +433,7 @@ class LineFollowing(Node):
             # Turn right
             self.get_logger().info("go_and_turn: turning right...")
             self.message.linear.x = 0.0
-            self.message.angular.z = 0.75 * angular_scale
+            self.message.angular.z = 0.6 * angular_scale
             self.publisher.publish(self.message)
             time.sleep(turn_time)
 
