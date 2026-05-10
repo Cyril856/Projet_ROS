@@ -212,13 +212,14 @@ class Goal(Node):
         cv2.waitKey(1)
 
     def run(self):
-        self.get_logger().info("Goal node started")
         last_angular = 0.0
         
         while rclpy.ok():
             if not self.active:
                 time.sleep(0.1)
                 continue
+
+            self.get_logger().info("Goal node started")
 
             if self.image is not None:
                 self.compute_centroids()

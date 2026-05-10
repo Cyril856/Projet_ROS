@@ -21,6 +21,9 @@ def generate_launch_description():
         name='linefollow',
         output='screen',
         # Pas de on_exit=Shutdown() pour permettre une gestion dynamique
+        parameters=[{
+        'emergency_stop_dist': 0.2, 
+        }]
     )
 
     # Nodes gérées par 'controle' (pas de Shutdown automatique)

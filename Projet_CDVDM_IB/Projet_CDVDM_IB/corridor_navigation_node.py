@@ -57,11 +57,12 @@ class CorridorNavigation(Node):
 
         state_description = ''
 
-        stop_distance = 0.35
-        velo_ang = 0.15
+        stop_distance = 0.25 # 0.35 en réel
+        velo_ang = 0.1 # 0.15
+        velo_linear = 0.08 # 0.15
         if regions['front'] > stop_distance and regions['fleft'] > stop_distance and regions['fright'] > stop_distance:
             state_description = 'case 1 - nothing'
-            linear_x = 0.1
+            linear_x = velo_linear
             angular_z = 0.0
         elif regions['front'] < stop_distance and regions['fleft'] > stop_distance and regions['fright'] > stop_distance:
             state_description = 'case 2 - front'
@@ -99,7 +100,7 @@ class CorridorNavigation(Node):
         elif regions['front'] > stop_distance and regions['fleft'] < stop_distance and regions['fright'] < stop_distance:
             state_description = 'case 8 - fleft and fright'
             self.get_logger().info(f"Regions - front: {regions['front']}")
-            linear_x = 0.15
+            linear_x = velo_linear
             angular_z = 0.0
         else:
             state_description = 'unknown case'

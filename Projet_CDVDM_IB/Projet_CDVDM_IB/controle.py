@@ -14,12 +14,13 @@ class ProjectSequencer(Node):
         self.client_corridor = self.create_client(SetBool, '/activate_corridor')
         self.client_goal = self.create_client(SetBool, '/activate_goal') ## ajouter service dans la node
         self.client_handteleop = self.create_client(SetBool, '/activate_handteleop')
+        self.client_blueline = self.create_client(SetBool, '/activate_blueline')
         
         self.blueline = False
         self.time_reset = datetime.datetime.now()
 
         #self.current_stage = 0  # Compteur de progression
-        self.declare_parameter('current_stage', 3) # paramètre pour âtre accessible depuis le terminal : à tester !!
+        self.declare_parameter('current_stage', 0) # paramètre pour âtre accessible depuis le terminal : à tester !!
         
         #self.check_logic() # 1er appel ## cas ou on a la détection de ligne
 
@@ -27,7 +28,7 @@ class ProjectSequencer(Node):
         self.timer = self.create_timer(1, self.check_logic) ## à commenter lorsqu'on aura la détection de ligne
         ## checker si un problème peut survenir s'il est appelé plusieurs fois pdt que la node est activée
 
-         # detection de ligne bleue
+        # detection de ligne bleue
         self.blueline_active = False
         self.srv = self.create_service(SetBool, '/blueline_status', self.handle_blueline)
 
@@ -54,7 +55,7 @@ class ProjectSequencer(Node):
 
         self.get_logger().info(f"Le dernier_appel date d'il y a : {dernier_appel} sec")
 
-        if dernier_appel > 3.0 : ## à calibrer, pas sur qu'il fonctionne
+        if dernier_appel > 3.0 and current_stage <= 4 : ## à calibrer, pas sur qu'il fonctionne
             current_stage+=1
             self.time_reset = datetime.datetime.now()
             self.set_parameters([Parameter('current_stage', Parameter.Type.INTEGER, current_stage)])
@@ -69,6 +70,7 @@ class ProjectSequencer(Node):
 
         if current_stage == 0:
             self.call_service(self.client_linefollow, True)
+            self.call_service(self.client_blueline, True)
 
         elif current_stage == 1:
             self.call_service(self.client_linefollow, False)
@@ -84,6 +86,8 @@ class ProjectSequencer(Node):
 
         elif current_stage == 4:
             self.call_service(self.client_linefollow, False)
+            self.call_service(self.client_blueline, False)
+            
 
         # A lancer à la main
         elif current_stage == 5:    

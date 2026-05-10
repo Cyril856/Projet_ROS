@@ -69,15 +69,12 @@ class LineFollowing(Node):
         self.declare_parameter('angular_scale',1.0)
 
         # STOP
-        self.declare_parameter('emergency_stop_dist', 0.3)
+        self.declare_parameter('emergency_stop_dist', 0.2)
         self.emergency_stop_dist = self.get_parameter('emergency_stop_dist').value
         self.stop = False
 
-        # Timer pour synchronisation (arret d'urgence)
-        self.sync_timer = self.create_timer(0.1, self.check_sync)
-
         # controle de node
-        self.active = True
+        self.active = False
         self.srv = self.create_service(SetBool, '/activate_linefollow', self.handle_activation)
 
       # Callback du service
@@ -87,23 +84,15 @@ class LineFollowing(Node):
         response.message = f"Line Following node state: {self.active}"
         return response
 
-    def check_sync(self):
-        if not self.active:
-            return  # Ignore les données LiDAR si la node est inactive
-        if self.latest_image is not None and self.latest_scan is not None:
-            self.analyse_lidar(self.latest_scan, self.latest_image)
-
     def safe_min(self, ranges_slice, default=float('inf')):
-            filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0 and x < 1.0]
+            filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0]
             return min(filtered) if filtered else default
 
     def lidar_callback(self, msg):
         if not self.active:
             return  # Ignore les données LiDAR si la node est inactive
         self.latest_scan = msg
-
-    def analyse_lidar(self, latest_scan, latest_image) :
-        front = self.safe_min(latest_scan.ranges[345:360] + latest_scan.ranges[0:15])
+        front = self.safe_min(msg.ranges[345:360] + msg.ranges[0:15])
         if front < self.emergency_stop_dist:
             self.stop = True
             self.message.linear.x = 0.0
@@ -112,17 +101,10 @@ class LineFollowing(Node):
             self.get_logger().warn(f"EMERGENCY STOP — obstacle à {front:.2f} m")
         else : 
             self.stop = False
-            self.affichage(latest_image)
-
+    
     def listener_callback(self, msg):
         if not self.active:
             return  # Ignore les images si la node est inactive
-        self.latest_image = msg
-    
-    def affichage(self, latest_image):
-        if self.stop:     #okasou
-            return
-        msg = latest_image
         
         # Convertir les données compressées en tableau numpy
         
@@ -383,15 +365,19 @@ class LineFollowing(Node):
 
 
     def run(self):
-        self.get_logger().info("run() started")
         while rclpy.ok():
-
             # Controle de node
             if not self.active:
                 # Si inactive, on ne fait rien (mais on continue de tourner pour écouter les callbacks)
                 time.sleep(0.1) ## à augmenter si trop faible 
                 continue
-            
+
+            if self.stop:        
+                time.sleep(0.05)
+                continue
+
+            self.get_logger().info("run() started")
+
             self.get_logger().info(f"loop tick | image: {self.image is not None} | roundabout: {self.roundabout_mode}")
             image = self.image
             if image is not None:

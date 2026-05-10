@@ -44,6 +44,17 @@ class ObstacleAvoidance(Node):
         self.steerdir = None
         self.blue_centroid = None
 
+        # controle de node
+        self.active = False
+        self.srv = self.create_service(SetBool, '/activate_blueline', self.handle_activation)
+
+    # Callback du service
+    def handle_activation(self, request, response):
+        self.active = request.data
+        response.success = True
+        response.message = f"Blue Line node state: {self.active}"
+        return response
+
     def call_service(self, client, state):
         if not client.wait_for_service(timeout_sec=1.0):
             return
@@ -52,6 +63,8 @@ class ObstacleAvoidance(Node):
         client.call_async(req)
 
     def listener_callback(self, msg):
+        if not self.active:
+            return  # Ignore les données LiDAR si la node est inactive
         self.latest_image = msg
         self.affichage(self.latest_image)
 

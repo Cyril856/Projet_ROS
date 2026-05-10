@@ -39,7 +39,7 @@ class ObstacleAvoidance(Node):
     def handle_activation(self, request, response):
         self.active = request.data
         response.success = True
-        response.message = f"Obstalce avoidance node state: {self.active}"
+        response.message = f"Obstacle avoidance node state: {self.active}"
         return response
 
     def safe_min(self, ranges_slice, default=float('inf')):
@@ -47,16 +47,16 @@ class ObstacleAvoidance(Node):
         return min(filtered) if filtered else default
 
     def lidar_callback(self, msg):
-        if self.active:
-            #self.get_logger().info("Bottle Avoidance Node Started")
-            regions = {
-                'front'  : self.safe_min(msg.ranges[350:360] + msg.ranges[0:10]),
-                'fleft'  : self.safe_min(msg.ranges[11:50]),
-                'left'   : self.safe_min(msg.ranges[51:120]),
-                'right'  : self.safe_min(msg.ranges[240:310]),
-                'fright' : self.safe_min(msg.ranges[311:349]),
-            }
-            self.take_action(regions)
+        if not self.active:
+            return  # Ignore les données LiDAR si la node est inactive
+        regions = {
+            'front'  : self.safe_min(msg.ranges[350:360] + msg.ranges[0:10]),
+            'fleft'  : self.safe_min(msg.ranges[11:50]),
+            'left'   : self.safe_min(msg.ranges[51:120]),
+            'right'  : self.safe_min(msg.ranges[240:310]),
+            'fright' : self.safe_min(msg.ranges[311:349]),
+        }
+        self.take_action(regions)
 
     def take_action(self, regions):
         twist = Twist()
