@@ -45,7 +45,7 @@ class ObstacleAvoidance(Node):
         self.blue_centroid = None
 
         # controle de node
-        self.active = False
+        self.active = True
         self.srv = self.create_service(SetBool, '/activate_blueline', self.handle_activation)
 
     # Callback du service

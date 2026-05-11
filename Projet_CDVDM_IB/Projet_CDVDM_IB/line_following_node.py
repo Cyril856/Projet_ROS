@@ -21,7 +21,7 @@ class LineFollowing(Node):
 
         self.camera_sub = self.create_subscription(
             CompressedImage,
-            '/image_raw/compressed', #/camera
+            '/camera/image_raw/compressed', #/camera
             self.listener_callback,
             10
         )
@@ -69,7 +69,7 @@ class LineFollowing(Node):
         self.stop = False
 
         # controle de node
-        self.active = False
+        self.active = True
         self.srv = self.create_service(SetBool, '/activate_linefollow', self.handle_activation)
 
       # Callback du service

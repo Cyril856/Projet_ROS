@@ -18,7 +18,7 @@ class ObstacleAvoidance(Node):
         self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # --- Paramètres ---
-        self.stop_distance   = 0.3    # Distance de détection d'une bouteille (m)
+        self.stop_distance   = 0.3   # Distance de détection d'une bouteille (m)
         self.linear_speed    = 0.05   # Vitesse linéaire faible (m/s)
         self.angular_speed   = 0.3    # Vitesse angulaire d'évitement (rad/s)
 
@@ -32,7 +32,7 @@ class ObstacleAvoidance(Node):
         self.return_steps    = 0      # Compteur de retour (même durée)
 
         # controle de node
-        self.active = False
+        self.active = True
         self.srv = self.create_service(SetBool, '/activate_obstacleavoidance', self.handle_activation)
 
     # Callback du service
@@ -51,10 +51,10 @@ class ObstacleAvoidance(Node):
             return  # Ignore les données LiDAR si la node est inactive
         regions = {
             'front'  : self.safe_min(msg.ranges[350:360] + msg.ranges[0:10]),
-            'fleft'  : self.safe_min(msg.ranges[11:50]),
-            'left'   : self.safe_min(msg.ranges[51:120]),
-            'right'  : self.safe_min(msg.ranges[240:310]),
-            'fright' : self.safe_min(msg.ranges[311:349]),
+            'fleft'  : self.safe_min(msg.ranges[11:55]),
+            'left'   : self.safe_min(msg.ranges[56:120]),
+            'right'  : self.safe_min(msg.ranges[240:305]),
+            'fright' : self.safe_min(msg.ranges[306:349]),
         }
         self.take_action(regions)
 

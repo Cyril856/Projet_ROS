@@ -23,7 +23,7 @@ class CorridorNavigation(Node):
         )
 
         # controle de node
-        self.active = False
+        self.active = True
         self.srv = self.create_service(SetBool, '/activate_corridor', self.handle_activation)
 
       # Callback du service
@@ -45,8 +45,8 @@ class CorridorNavigation(Node):
         'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),  # 30° devant
         'fleft' : self.safe_min(msg.ranges[16:75]),                      # 60° à gauche avant
         'left'  : self.safe_min(msg.ranges[76:120]),                     # 45° à gauche
-        'right' : self.safe_min(msg.ranges[240:285]),                    # 45° à droite
-        'fright': self.safe_min(msg.ranges[286:345])                    # 60° à droite avant  
+        'right' : self.safe_min(msg.ranges[240:280]),                    # 45° à droite
+        'fright': self.safe_min(msg.ranges[281:345])                    # 60° à droite avant  
         }
         self.take_action(regions)
 
@@ -57,9 +57,9 @@ class CorridorNavigation(Node):
 
         state_description = ''
 
-        stop_distance = 0.25 # 0.35 en réel
-        velo_ang = 0.1 # 0.15
-        velo_linear = 0.08 # 0.15
+        stop_distance = 0.3 # 0.35 en réel
+        velo_ang = 0.15 # 0.15
+        velo_linear = 0.15 # 0.15
         if regions['front'] > stop_distance and regions['fleft'] > stop_distance and regions['fright'] > stop_distance:
             state_description = 'case 1 - nothing'
             linear_x = velo_linear
