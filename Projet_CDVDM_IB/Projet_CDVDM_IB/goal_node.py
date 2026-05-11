@@ -9,37 +9,23 @@ import cv2
 import threading
 from std_srvs.srv import SetBool
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Image # pour gazebo
-from cv_bridge import CvBridge # pour gazebo
+
 
 class Goal(Node):
     def __init__(self):
         super().__init__('goal_node')
-        ## Gazebo
-        self.bridge = CvBridge()
-        self.camera_sub = self.create_subscription(
-            #CompressedImage,
-            Image,
-            #'/camera/image_raw/compressed',
-            '/image_raw', # en simu !
-            self.listener_callback,
-            10
-        )
 
-        self.lidar_subscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.lidar_callback,
+        self.subscription = self.create_subscription(
+            CompressedImage,
+            '/image_raw/compressed', #/camera
+            self.listener_callback,
             10
         )
 
         self.message = Twist()
         self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
 
-        self.active = False
-
         self.image = None
-        self.regions = {}
 
         self.ball_centroid = None
         self.ball_detected = False
@@ -64,8 +50,7 @@ class Goal(Node):
         np_arr = np.frombuffer(msg.data, np.uint8)
         
         # Décoder l'image
-        #image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR) 
-        image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8') ## gazebo
+        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR) 
 
         if image is not None:
             self.image = image.copy()
@@ -88,40 +73,6 @@ class Goal(Node):
         mask_red    = cv2.bitwise_or(mask_red1, mask_red2)
 
         return image_hsv, mask_yellow, mask_red
-
-    def safe_min(self, ranges_slice, default=float('inf')):
-        filtered = [x for x in ranges_slice if not math.isinf(x) and not math.isnan(x) and x > 0.0]
-        return min(filtered) if filtered else default
-
-    def lidar_callback(self, msg):
-        if not self.active:
-            return  # Ignore les données LiDAR si la node est inactive
-        self.regions = {
-            'front' : self.safe_min(msg.ranges[345:360] + msg.ranges[0:15]),
-            'fleft' : self.safe_min(msg.ranges[16:75]),
-            'left'  : self.safe_min(msg.ranges[76:120]),
-            'right' : self.safe_min(msg.ranges[240:285]),
-            'fright': self.safe_min(msg.ranges[286:345])
-        }
-
-    def goal_lidar(self):
-        if not self.regions:
-            return False
-
-        front  = self.regions.get('front',  float('inf'))
-        left  = self.regions.get('fleft',  float('inf'))
-        right = self.regions.get('fright', float('inf'))
-
-        pole_range = 1.5 
-
-        poles_detected = (left < pole_range and right < pole_range)
-
-        self.get_logger().info(
-            f"Lidar | front: {front:.2f} | fleft: {left:.2f} | fright: {right:.2f} | "
-            f"poles_detected: {poles_detected}"
-        )
-
-        return poles_detected
 
     def centroid(self, binary):
         M = cv2.moments(binary)
@@ -213,6 +164,7 @@ class Goal(Node):
 
     def run(self):
         last_angular = 0.0
+        current_time = time.time()
         
         while rclpy.ok():
             if not self.active:
@@ -228,12 +180,11 @@ class Goal(Node):
                 msg = Twist()
                 img_center = self.image.shape[1] // 2
 
-                # CAS 1 : On voit la balle (et idéalement le but)
+                
                 if self.ball_centroid is not None:
                     self.ball_detected=True
                     ball_x = self.ball_centroid[0]
                     
-                    # Si on voit aussi le but, on calcule l'alignement
                     if self.goal_centroid is not None:
                         target_x = self.goal_centroid[0]
                         error = ball_x - target_x
@@ -248,8 +199,8 @@ class Goal(Node):
                             msg.angular.z = float(error) / img_center * 0.5 + 0.1
 
                     msg.angular.z = -float(error) / img_center * 0.5
-                    msg.linear.x = 0.05# Il avance toujours vers la balle
-                    last_angular = msg.angular.z # On mémorise la direction
+                    msg.linear.x = 0.05
+                    last_angular = msg.angular.z 
 
                 else:
                     if not self.ball_detected:
@@ -267,9 +218,19 @@ class Goal(Node):
                             error = 1.2 * (ball_x - self.right_pole_centroid[0])-10
                             msg.angular.z = -float(error) / img_center * 0.5
                         else:
-                            time.sleep(3)
                             msg.angular.z=0.0
                             msg.linear.x=0.0
+
+                        pole_recently_seen = (self.last_pole_seen_time is not None and 
+                                         (current_time - self.last_pole_seen_time) < 3.0)
+
+                        if pole_recently_seen:
+                            self.get_logger().info("Poteau perdu mais on continue l'attaque (3s buffer)")
+                            msg.linear.x = 0.09
+                        else:
+                            self.get_logger().info("3 secondes écoulées sans poteau : STOP")
+                            msg.linear.x = 0.0
+                            msg.angular.z = 0.0
 
                 self.publisher.publish(msg)
                     

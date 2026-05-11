@@ -2,9 +2,17 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     # Node principale qui gère l'activation/désactivation des autres
+    rab_direction_arg = DeclareLaunchArgument(
+        'RAB_direction',
+        default_value='R', 
+        description='Roundabout direction (L or R)'
+    )
+
     controle = Node(
         package='Projet_CDVDM_IB',
         executable='controle',
@@ -23,6 +31,7 @@ def generate_launch_description():
         # Pas de on_exit=Shutdown() pour permettre une gestion dynamique
         parameters=[{
         'emergency_stop_dist': 0.2, 
+        'RAB_direction': LaunchConfiguration('RAB_direction')
         }]
     )
 
@@ -64,6 +73,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        rab_direction_arg,
         linefollow,
         blueline,
         obstacleavoidance,

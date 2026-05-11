@@ -9,8 +9,6 @@ import cv2
 import threading
 from std_srvs.srv import SetBool
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Image # pour gazebo
-from cv_bridge import CvBridge # pour gazebo
 
 
 
@@ -19,13 +17,11 @@ class LineFollowing(Node):
         super().__init__('compressed_image_subscriber')
         
         # Gazebo
-        self.bridge = CvBridge()
+        #self.bridge = CvBridge()
 
         self.camera_sub = self.create_subscription(
-            #CompressedImage,
-            Image,
-            #'/camera/image_raw/compressed',
-            '/image_raw', # en simu !
+            CompressedImage,
+            '/image_raw/compressed', #/camera
             self.listener_callback,
             10
         )
@@ -36,9 +32,7 @@ class LineFollowing(Node):
             self.lidar_callback,
             10
         )
-    
         #self.subscription  # to prevent unused variable warning
-
 
         self.message = Twist()
         self.publisher = self.create_publisher(Twist,'/cmd_vel',10)
@@ -47,12 +41,12 @@ class LineFollowing(Node):
         self.latest_scan = None
     
         self.image = None
-        self.horizon =130 #275 #
+        self.horizon = 275 # #130
 
         self.middle_screen =  None
         self.middle_point = None
         self.steerdir = None
-        self.margin  =135 #350 #
+        self.margin  = 350 # #135
 
         self.green_centroid = None
         self.red_centroid = None
@@ -62,9 +56,10 @@ class LineFollowing(Node):
 
         self.roundabout_mode= False
         self.roundabout_count=0
-        self.roundabout_dir="R"
 
-        self.declare_parameter('RAB_direction',"L")
+        self.declare_parameter('RAB_direction', 'R') 
+        self.roundabout_dir = self.get_parameter('RAB_direction').value
+
         self.declare_parameter('linear_scale', 1.0)
         self.declare_parameter('angular_scale',1.0)
 
@@ -105,13 +100,15 @@ class LineFollowing(Node):
     def listener_callback(self, msg):
         if not self.active:
             return  # Ignore les images si la node est inactive
-        
+        self.latest_image = msg
+
+        if self.stop:
+            return
         # Convertir les données compressées en tableau numpy
-        
         np_arr = np.frombuffer(msg.data, np.uint8)
         # Décoder l'image
-        #image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        #image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
         if image is not None:
             self.image = image
@@ -186,13 +183,13 @@ class LineFollowing(Node):
     def hsv_segmentation(self,image):
             image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-            lower_red1 = np.array([0, 50, 50])
+            lower_red1 = np.array([0, 60, 60])
             upper_red1 = np.array([16, 255, 255])
 
-            lower_red2 = np.array([160, 50, 50])
+            lower_red2 = np.array([160, 60, 60])
             upper_red2 = np.array([179, 255, 255])
 
-            lower_green = np.array([30, 50, 50])
+            lower_green = np.array([30, 60, 60])
             upper_green = np.array([94, 255, 255])
 
             mask_red1 = cv2.inRange(image_hsv, lower_red1, upper_red1)
@@ -224,8 +221,8 @@ class LineFollowing(Node):
         s_lroi = lower_roi[:, :, 1]
         v_lroi = lower_roi[:, :, 2]
 
-        green_mask = ((h_lroi >= 30) & (h_lroi <= 94) & (s_lroi >= 50) & (v_lroi >= 50))
-        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 50)& (v_lroi >= 50))
+        green_mask = ((h_lroi >= 30) & (h_lroi <= 94) & (s_lroi >= 60) & (v_lroi >= 60))
+        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 60)& (v_lroi >= 60))
 
         # 2D binary images for moment calculation
         green_binary = np.zeros(lower_roi.shape[:2], dtype=np.uint8)
@@ -251,8 +248,8 @@ class LineFollowing(Node):
         s_uroi = upper_roi[:, :, 1]
         v_uroi = upper_roi[:, :, 2]
 
-        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 94) & (s_uroi >= 50) & (v_uroi >= 50))
-        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 50)& (v_uroi >= 50))
+        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 94) & (s_uroi >= 60) & (v_uroi >= 60))
+        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 60)& (v_uroi >= 60))
 
         upper_green_binary = np.zeros(upper_roi.shape[:2], dtype=np.uint8)
         upper_green_binary[upper_green_mask] = 255
@@ -280,17 +277,15 @@ class LineFollowing(Node):
             self.roundabout_mode=True
             return
 
-        # Check if centroids are valid and in their expected regions:
-        # green should be in left fifth, red in right fifth of lower ROI
         green_valid = (
             green_centroid is not None and
-            self.horizon <= green_centroid[1] + horizon < height and  # in lower screen
-            green_centroid[0] < 4 * fifth_screen                               # in left fifth
+            self.horizon <= green_centroid[1] + horizon < height and 
+            green_centroid[0] < 4 * fifth_screen                               
         )
         red_valid = (
             red_centroid is not None and
-            self.horizon <= red_centroid[1] + horizon < height and    # in lower screen
-            red_centroid[0] > fifth_screen                            # in right fifth
+            self.horizon <= red_centroid[1] + horizon < height and    
+            red_centroid[0] > fifth_screen                            
         )
 
         green_center = (
@@ -386,8 +381,8 @@ class LineFollowing(Node):
                     self.roundabout_protocol()
                     self.roundabout_count+=1
                     self.roundabout_mode = False
-                    self.margin = 180 #300 #
-                    self.horizon = 150 #200 #
+                    self.margin = 300 # #180
+                    self.horizon = 200 # #150
                 else:
                     image_hsv = self.hsv_segmentation(image.copy())
                     self.steer(image_hsv)

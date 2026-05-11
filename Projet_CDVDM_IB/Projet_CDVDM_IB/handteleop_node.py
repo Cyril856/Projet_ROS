@@ -13,8 +13,8 @@ from cv_bridge import CvBridge # pour gazebo
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     static_image_mode=False,
-    max_num_hands=1,          # was probably 2
-    model_complexity=0,        # 0 = fastest, 1 = default
+    max_num_hands=1,          
+    model_complexity=0,        
     min_detection_confidence=0.5,
     min_tracking_confidence=0.5
 )
@@ -91,6 +91,8 @@ class HandTeleop(Node):
             result = hands.process(rgb)
 
             movement_text = "No hand detected"
+            self.message.linear.x = 0.0
+            self.message.angular.z = 0.0
 
             if result.multi_hand_landmarks:
                 for handLms in result.multi_hand_landmarks:
@@ -99,12 +101,12 @@ class HandTeleop(Node):
                     index_tip=handLms.landmark[8]
                     index_mcp=handLms.landmark[5]
 
-                    THRESHOLD = 0.05  # 5% of frame size, tune this up/down as needed
+                    THRESHOLD = 0.05  
 
                     dx = index_tip.x - index_mcp.x
                     dy = index_tip.y - index_mcp.y
 
-                    if  abs(dy) > abs(dx): # vertical movement dominates
+                    if  abs(dy) > abs(dx): 
                         self.message.angular.z = 0.0
                         if dy > THRESHOLD:
                             self.message.linear.x = -0.15
@@ -121,7 +123,7 @@ class HandTeleop(Node):
                             self.message.angular.z = 0.0
                             movement_text = "STOP"
 
-                    elif  abs(dx) > abs(dy): # horizontal movement dominates
+                    elif  abs(dx) > abs(dy):
                         self.message.linear.x = 0.0
                         if dx > THRESHOLD:
                             self.message.angular.z = -0.2
