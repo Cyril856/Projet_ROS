@@ -69,7 +69,7 @@ class LineFollowing(Node):
         self.stop = False
 
         # controle de node
-        self.active = True
+        self.active = False
         self.srv = self.create_service(SetBool, '/activate_linefollow', self.handle_activation)
 
       # Callback du service

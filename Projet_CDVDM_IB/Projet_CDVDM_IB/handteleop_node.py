@@ -43,7 +43,7 @@ class HandTeleop(Node):
         #self.timer = self.create_timer(0.03, self.robot_callback)
 
         # controle de node
-        self.active = True
+        self.active = False
         self.srv = self.create_service(SetBool, '/activate_handteleop', self.handle_activation)
 
       # Callback du service

@@ -19,8 +19,8 @@ class ProjectSequencer(Node):
         self.blueline = False
         self.time_reset = datetime.datetime.now()
 
-        #self.current_stage = 0  # Compteur de progression
-        self.declare_parameter('current_stage', 0) # paramètre pour âtre accessible depuis le terminal : à tester !!
+        self.current_stage = 0  # Compteur de progression
+        #self.declare_parameter('current_stage', 0) # paramètre pour âtre accessible depuis le terminal : à tester !!
         
         #self.check_logic() # 1er appel ## cas ou on a la détection de ligne
 
@@ -55,7 +55,7 @@ class ProjectSequencer(Node):
 
         self.get_logger().info(f"Le dernier_appel date d'il y a : {dernier_appel} sec")
 
-        if dernier_appel > 3.0 and current_stage <= 4 : ## à calibrer, pas sur qu'il fonctionne
+        if dernier_appel > 3.0 and current_stage <= 5 : ## à calibrer, pas sur qu'il fonctionne
             current_stage+=1
             self.time_reset = datetime.datetime.now()
             self.set_parameters([Parameter('current_stage', Parameter.Type.INTEGER, current_stage)])
@@ -68,32 +68,31 @@ class ProjectSequencer(Node):
         # Exemple de logique basée sur un compteur ou une condition
         current_stage = self.get_parameter('current_stage').value
 
-        if current_stage == 0:
+        if current_stage == 1:
             self.call_service(self.client_linefollow, True)
             self.call_service(self.client_blueline, True)
 
-        elif current_stage == 1:
+        elif current_stage == 2:
             self.call_service(self.client_linefollow, False)
             self.call_service(self.client_obstacleavoidance, True)
             
-        elif current_stage == 2:
+        elif current_stage == 3:
             self.call_service(self.client_obstacleavoidance, False)
             self.call_service(self.client_corridor, True)
         
-        elif current_stage == 3:
+        elif current_stage == 4:
             self.call_service(self.client_corridor, False)
             self.call_service(self.client_linefollow, True)
 
-        elif current_stage == 4:
+        elif current_stage == 5:
             self.call_service(self.client_linefollow, False)
             self.call_service(self.client_blueline, False)
-            
 
         # A lancer à la main
-        elif current_stage == 5:    
+        elif current_stage == 6:    
             self.call_service(self.client_goal, True) ## ajouter  une condition d'arrêt ?? dès qu'il passe les poteaux ?
 
-        elif current_stage == 6:
+        elif current_stage == 7:
             self.call_service(self.client_goal, False)
             self.call_service(self.client_handteleop, True)
 

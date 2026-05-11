@@ -32,7 +32,7 @@ class ObstacleAvoidance(Node):
         self.return_steps    = 0      # Compteur de retour (même durée)
 
         # controle de node
-        self.active = True
+        self.active = False
         self.srv = self.create_service(SetBool, '/activate_obstacleavoidance', self.handle_activation)
 
     # Callback du service

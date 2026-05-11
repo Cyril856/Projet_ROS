@@ -23,7 +23,7 @@ class CorridorNavigation(Node):
         )
 
         # controle de node
-        self.active = True
+        self.active = False
         self.srv = self.create_service(SetBool, '/activate_corridor', self.handle_activation)
 
       # Callback du service
