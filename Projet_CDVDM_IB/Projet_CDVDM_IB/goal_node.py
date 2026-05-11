@@ -17,7 +17,7 @@ class Goal(Node):
 
         self.subscription = self.create_subscription(
             CompressedImage,
-            '/image_raw/compressed', #/camera
+            '/camera/image_raw/compressed', #/camera
             self.listener_callback,
             10
         )
@@ -34,7 +34,7 @@ class Goal(Node):
         self.goal_centroid = None
 
         # controle de node
-        self.active = False
+        self.active = True
         self.srv = self.create_service(SetBool, '/activate_goal', self.handle_activation)
 
       # Callback du service
@@ -58,7 +58,7 @@ class Goal(Node):
     def hsv_segmentation(self, image):
         image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        lower_yellow = np.array([20, 100, 40])
+        lower_yellow = np.array([20, 10, 40])
         upper_yellow = np.array([35, 255, 255])
 
         lower_red1 = np.array([0, 130, 30])

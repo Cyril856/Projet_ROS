@@ -10,7 +10,7 @@ class HSVCalibration(Node):
         super().__init__('hsv_calibration')
         self.subscription = self.create_subscription(
             CompressedImage,
-            '/image_raw/compressed', #/camera
+            '/camera/image_raw/compressed', #
             self.listener_callback,
             10
         )

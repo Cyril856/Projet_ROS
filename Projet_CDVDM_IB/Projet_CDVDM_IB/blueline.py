@@ -16,12 +16,12 @@ class ObstacleAvoidance(Node):
         super().__init__('obstacle_avoidance_node')
         # Subs
         ## Gazebo
-        self.bridge = CvBridge()
+        #self.bridge = CvBridge()
         self.camera_sub = self.create_subscription(
-            #CompressedImage,
-            Image,
-            #'/camera/image_raw/compressed',
-            '/image_raw', # en simu !
+            CompressedImage,
+            #Image,
+            '/camera/image_raw/compressed',
+            #'/image_raw', # en simu !
             self.listener_callback,
             10
         )
@@ -45,7 +45,7 @@ class ObstacleAvoidance(Node):
         self.blue_centroid = None
 
         # controle de node
-        self.active = True
+        self.active = False
         self.srv = self.create_service(SetBool, '/activate_blueline', self.handle_activation)
 
     # Callback du service
@@ -63,18 +63,15 @@ class ObstacleAvoidance(Node):
         client.call_async(req)
 
     def listener_callback(self, msg):
+        self.get_logger().info("Image reçue !")
         if not self.active:
             return  # Ignore les données LiDAR si la node est inactive
-        self.latest_image = msg
-        self.affichage(self.latest_image)
-
-    # fonctions caméra
-    def affichage(self, latest_image):
-        np_arr = np.frombuffer(latest_image.data, np.uint8)
+        
+        np_arr = np.frombuffer(msg.data, np.uint8)
         
         # Décoder l'image
-        #image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR) 
-        image = self.bridge.imgmsg_to_cv2(latest_image, desired_encoding='bgr8') ## gazebo
+        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        #image = self.bridge.imgmsg_to_cv2(latest_image, desired_encoding='bgr8') ## gazebo
 
         if image is not None:
             self.image = image

@@ -41,12 +41,12 @@ class LineFollowing(Node):
         self.latest_scan = None
     
         self.image = None
-        self.horizon = 275 # #130
+        self.horizon = 130 #275 #
 
         self.middle_screen =  None
         self.middle_point = None
         self.steerdir = None
-        self.margin  = 350 # #135
+        self.margin  = 125 #350 #
 
         self.green_centroid = None
         self.red_centroid = None
@@ -57,7 +57,7 @@ class LineFollowing(Node):
         self.roundabout_mode= False
         self.roundabout_count=0
 
-        self.declare_parameter('RAB_direction', 'R') 
+        self.declare_parameter('RAB_direction', 'L') 
         self.roundabout_dir = self.get_parameter('RAB_direction').value
 
         self.declare_parameter('linear_scale', 1.0)
@@ -183,13 +183,13 @@ class LineFollowing(Node):
     def hsv_segmentation(self,image):
             image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-            lower_red1 = np.array([0, 60, 60])
+            lower_red1 = np.array([0, 60, 40])
             upper_red1 = np.array([16, 255, 255])
 
-            lower_red2 = np.array([160, 60, 60])
+            lower_red2 = np.array([160,60, 40])
             upper_red2 = np.array([179, 255, 255])
 
-            lower_green = np.array([30, 60, 60])
+            lower_green = np.array([30, 50, 40])
             upper_green = np.array([94, 255, 255])
 
             mask_red1 = cv2.inRange(image_hsv, lower_red1, upper_red1)
@@ -221,8 +221,8 @@ class LineFollowing(Node):
         s_lroi = lower_roi[:, :, 1]
         v_lroi = lower_roi[:, :, 2]
 
-        green_mask = ((h_lroi >= 30) & (h_lroi <= 94) & (s_lroi >= 60) & (v_lroi >= 60))
-        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 60)& (v_lroi >= 60))
+        green_mask = ((h_lroi >= 30) & (h_lroi <= 94) & (s_lroi >= 50) & (v_lroi >= 40))
+        red_mask = (((h_lroi <= 10) | (h_lroi >= 160)) & (s_lroi >= 60)& (v_lroi >= 40))
 
         # 2D binary images for moment calculation
         green_binary = np.zeros(lower_roi.shape[:2], dtype=np.uint8)
@@ -248,8 +248,8 @@ class LineFollowing(Node):
         s_uroi = upper_roi[:, :, 1]
         v_uroi = upper_roi[:, :, 2]
 
-        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 94) & (s_uroi >= 60) & (v_uroi >= 60))
-        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 60)& (v_uroi >= 60))
+        upper_green_mask = ((h_uroi >= 30) & (h_uroi <= 94) & (s_uroi >= 50) & (v_uroi >= 40))
+        upper_red_mask = (((h_uroi <= 10) | (h_uroi >= 160)) & (s_uroi >= 60)& (v_uroi >= 40))
 
         upper_green_binary = np.zeros(upper_roi.shape[:2], dtype=np.uint8)
         upper_green_binary[upper_green_mask] = 255
@@ -381,14 +381,18 @@ class LineFollowing(Node):
                     self.roundabout_protocol()
                     self.roundabout_count+=1
                     self.roundabout_mode = False
-                    self.margin = 300 # #180
-                    self.horizon = 200 # #150
+                    if self.roundabout_dir=='R':
+                        self.margin = 100 #300 #
+                        self.horizon = 120 #200 #
+                    elif self.roundabout_dir=='L':
+                        self.margin = 100 #300 #
+                        self.horizon = 150 #200 #
                 else:
                     image_hsv = self.hsv_segmentation(image.copy())
                     self.steer(image_hsv)
             time.sleep(0.05)
 
-    def roundabout_protocol(self,forward_time=2.75, turn_time=2):
+    def roundabout_protocol(self,forward_time=3.5, turn_time=2):
         if self.roundabout_dir=="R":
             linear_scale = self.get_parameter('linear_scale').value
             angular_scale = self.get_parameter('angular_scale').value

@@ -7,8 +7,7 @@ import cv2
 import mediapipe as mp
 import time
 from std_srvs.srv import SetBool
-from sensor_msgs.msg import Image # pour gazebo
-from cv_bridge import CvBridge # pour gazebo
+
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
@@ -32,20 +31,19 @@ class HandTeleop(Node):
         self.publisher = self.create_publisher(Twist,'/cmd_vel',10)
         self.robot_image = None
         
-        ## Gazebo
-        self.bridge = CvBridge()
+
         self.camera_sub = self.create_subscription(
-            #CompressedImage,
-            Image,
-            #'/camera/image_raw/compressed',
-            '/image_raw', # en simu !
-            self.listener_callback,
+            CompressedImage,
+            #Image,
+            '/camera/image_raw/compressed',
+            #'/image_raw', # en simu !
+            self.robot_callback,
             10
         )
         #self.timer = self.create_timer(0.03, self.robot_callback)
 
         # controle de node
-        self.active = False
+        self.active = True
         self.srv = self.create_service(SetBool, '/activate_handteleop', self.handle_activation)
 
       # Callback du service
@@ -61,8 +59,8 @@ class HandTeleop(Node):
         np_arr = np.frombuffer(msg.data, np.uint8)
         
         # Décoder l'image
-        #image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR) 
-        image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8') ## gazebo
+        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR) 
+        #image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8') ## gazebo
 
         if image is not None:
             self.robot_image = image.copy()
